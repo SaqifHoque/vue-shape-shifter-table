@@ -1,24 +1,25 @@
-# vue-shape-shifter-table
+# Vue Shape Shifter Table
 
-## Project setup
-```
+An editable and responsive table component being modernized for Vue 3.
+
+## Requirements
+
+- Node.js 20.19 or newer for development
+- Vue 3.3 or newer
+
+## Development
+
+```bash
 npm install
+npm run dev
 ```
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
+Create a production build with:
 
-### Compiles and minifies for production
-```
+```bash
 npm run build
 ```
 
-### Lints and fixes files
-```
-npm run lint
-```
+## Vue 3 migration
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+The project now uses Vue 3's `createApp` entry point, a Vue 3-compatible plugin installer, and Vite in place of Vue CLI. Existing header and row data retain the original cell-object format so later feature work can remain backward compatible.

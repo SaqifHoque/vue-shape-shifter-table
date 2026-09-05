@@ -111,7 +111,7 @@
             </tr>
             <tr>
               <td>
-                <button v-if="rowPlus" @click.prevent="handleAddRow" class="link-default-sm color-lighter-1" :disabled='this.headers.length == 0'>+</button>
+                <button v-if="rowPlus" @click.prevent="handleAddRow" class="link-default-sm color-lighter-1" :disabled="headers.length === 0">+</button>
               </td>
             </tr>
           </tfoot>
@@ -122,7 +122,29 @@
 </template>
 <script>
 export default {
-  props: ['headers', 'tableData', 'footers', 'contextMenuColumn', 'contextMenuRow'],
+  name: 'ShapeShifterTable',
+  props: {
+    headers: {
+      type: Array,
+      default: () => [],
+    },
+    tableData: {
+      type: Array,
+      default: () => [],
+    },
+    footers: {
+      type: Array,
+      default: () => [],
+    },
+    contextMenuColumn: {
+      type: Array,
+      default: () => [],
+    },
+    contextMenuRow: {
+      type: Array,
+      default: () => [],
+    },
+  },
   data() {
     return {
       selected: null,
@@ -224,7 +246,9 @@ export default {
     initiateTextField(tableId) {
       this.selected = tableId;
       this.$nextTick(() => {
-        this.$refs[tableId][0].focus();
+        const input = this.$refs[tableId];
+        const element = Array.isArray(input) ? input[0] : input;
+        element?.focus();
       });
     },
     saveField(key,value,editEvent,editKey) {

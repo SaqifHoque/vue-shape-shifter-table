@@ -1,59 +1,52 @@
 <template>
-  <div id="app">
-    <ShapeShifterTable :headers="headers" :tableData="rows" :footers="footers"
-     :contextMenuColumn="context_menu_column" :contextMenuRow="context_menu_row"/>
-  </div>
+  <main id="app">
+    <h1>Vue Shape Shifter Table</h1>
+    <ShapeShifterTable
+      :headers="headers"
+      :table-data="rows"
+      :footers="footers"
+      :context-menu-column="columnMenu"
+      :context-menu-row="rowMenu"
+    />
+  </main>
 </template>
 
-<script>
+<script setup>
+import { ref } from 'vue'
 import ShapeShifterTable from './components/ShapeShifterTable.vue'
 
-export default {
-  name: 'App',
-  components: {
-    ShapeShifterTable
-  },
-  data () {
-    return {
-      headers: [],
-			rows: [],
-      footers: [],
-      context_menu_column: [
-				{ text: 'Shift Column', event: 'shift_column' },
-				// { text: 'Insert at right', event: 'insert_column_right' },
-				{ text: 'Delete Size', event: 'delete_size' }
-			],
-			context_menu_row: [
-				{ text: 'Shift Row', event: 'shift_row' },
-				{ text: 'Delete Row', event: 'delete_row' }
-			],
-    }
-  },
-  mounted() {
-    let row= [];
-    row.push({ field: 'mubu', key:'row-action', editable: true});
-    this.rows.push(row);
-    this.headers.push({ field: 'habu', key: 'col-action', editable: true });
-  },
-  methods:{
-    addColumn(){
-      if(this.rows.length == 0)
-        this.headers.push({ field: 'sample', key: 'col_' + this.headers.length, editable: true });
-      else {
-        this.headers.push({ field: 'sample', key: 'col_' + this.headers.length, editable: true });
-        this.rows.map((row, index) => {
-            return row.push({ field: 'sample', key: 'row_' + index + this.headers.length, editable: true });
-        })  
-      }
-    },
-    addRow(){
-      let row = [];
-      this.headers.forEach((header, index) => {
-        row.push({ field: 'sample', key: 'row_' + this.rows.length + index, editable: true });
-      })
-      this.rows.push(row);
-    },
-  }
-}
+const headers = ref([
+  { field: 'Name', key: 'name', editable: true },
+])
+
+const rows = ref([
+  [{ field: 'Sample value', key: 'sample-name', editable: true }],
+])
+
+const footers = ref([])
+const columnMenu = [
+  { text: 'Shift column', event: 'shift_column' },
+  { text: 'Delete column', event: 'delete_column' },
+]
+const rowMenu = [
+  { text: 'Shift row', event: 'shift_row' },
+  { text: 'Delete row', event: 'delete_row' },
+]
 </script>
 
+<style>
+body {
+  margin: 0;
+  background: #f4f5f7;
+  font-family: Arial, sans-serif;
+}
+
+#app {
+  width: min(960px, calc(100% - 2rem));
+  margin: 3rem auto;
+}
+
+h1 {
+  color: #212529;
+}
+</style>

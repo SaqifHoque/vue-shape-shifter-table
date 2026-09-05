@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2020",
     "module": "esnext",
     "baseUrl": "./",
     "moduleResolution": "node",
@@ -15,5 +15,6 @@
       "dom.iterable",
       "scripthost"
     ]
-  }
+  },
+  "include": ["src/**/*.js", "src/**/*.vue", "vite.config.js"]
 }

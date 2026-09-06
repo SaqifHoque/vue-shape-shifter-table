@@ -2,8 +2,8 @@
   <main id="app">
     <h1>Vue Shape Shifter Table</h1>
     <ShapeShifterTable
-      :headers="headers"
-      :table-data="rows"
+      v-model:headers="headers"
+      v-model:table-data="rows"
       :footers="footers"
       :context-menu-column="columnMenu"
       :context-menu-row="rowMenu"

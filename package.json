@@ -15,6 +15,7 @@
   "publishConfig": { "access": "public" },
   "scripts": {
     "dev": "vite",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "build": "vite build",
     "build:demo": "vite build --mode demo",
     "preview": "vite preview --mode demo",

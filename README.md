@@ -1,25 +1,62 @@
-# Vue Shape Shifter Table
+# Vue Shapeshifter Table
 
-An editable and responsive table component being modernized for Vue 3.
+A lightweight, editable table component for Vue 3.
 
-## Requirements
+## Install
 
-- Node.js 20.19 or newer for development
-- Vue 3.3 or newer
+```bash
+npm install vue-shapeshifter-table
+```
+
+Register the plugin globally:
+
+```js
+import { createApp } from 'vue'
+import ShapeshifterTable from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
+import App from './App.vue'
+
+createApp(App).use(ShapeshifterTable).mount('#app')
+```
+
+Or import the component directly:
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { ShapeShifterTable } from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
+
+const headers = ref([
+  { field: 'Name', key: 'name', editable: true },
+])
+
+const rows = ref([
+  [{ field: 'Maya', key: 'maya-name', editable: true }],
+])
+</script>
+
+<template>
+  <ShapeShifterTable :headers="headers" :table-data="rows" />
+</template>
+```
 
 ## Development
+
+Development requires Node.js 20.19 or newer.
 
 ```bash
 npm install
 npm run dev
-```
-
-Create a production build with:
-
-```bash
 npm run build
+npm run build:demo
+npm run preview
 ```
 
-## Vue 3 migration
+`npm run build` creates the externalized, ESM-only library bundle in `dist/`. `npm run build:demo` creates the standalone demonstration site in `demo-dist/`, and `npm run preview` serves that site. The two builds keep their output separate.
 
-The project now uses Vue 3's `createApp` entry point, a Vue 3-compatible plugin installer, and Vite in place of Vue CLI. Existing header and row data retain the original cell-object format so later feature work can remain backward compatible.
+`npm pack` rebuilds the library automatically before creating the package archive.
+
+## License
+
+MIT

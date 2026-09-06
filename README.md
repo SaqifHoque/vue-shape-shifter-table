@@ -98,6 +98,12 @@ npm run preview
 
 `npm pack` rebuilds the library automatically before creating the package archive.
 
+## Demo
+
+Run `npm run dev` to explore the product launch board with three sample projects. Try editing cells and headings, adding or deleting rows and columns, and moving columns from their action menus. The toolbar announces each completed action.
+
+The demo uses local state: changes are discarded when you refresh the page. Build it with `npm run build:demo` and serve it with `npm run preview`.
+
 ## License
 
 MIT

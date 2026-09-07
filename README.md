@@ -98,6 +98,25 @@ npm run preview
 
 `npm pack` rebuilds the library automatically before creating the package archive.
 
+## Publishing
+
+Before publishing a release:
+
+1. Update the version and release notes.
+2. Run `npm test`, `npm run build:demo`, and `npm run security:audit`.
+3. Inspect the package contents with `npm pack --dry-run`.
+4. Publish with `npm publish` after signing in to npm.
+
+`prepublishOnly` runs the test suite and blocks publication when npm reports a
+moderate-or-higher vulnerability. Package consumers receive no runtime
+dependencies; Vue remains a peer dependency.
+
+## Security
+
+Report suspected vulnerabilities privately through the repository's Security
+tab. See [SECURITY.md](SECURITY.md) for supported versions, reporting details,
+and the component's security design.
+
 ## Demo
 
 Run `npm run dev` to explore the product launch board with three sample projects. Try editing cells and headings, adding or deleting rows and columns, and moving columns from their action menus. The toolbar announces each completed action.

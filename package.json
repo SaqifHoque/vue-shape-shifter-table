@@ -2,6 +2,15 @@
   "name": "vue-shapeshifter-table",
   "version": "1.0.0",
   "description": "A responsive, editable, shape-shifting table component for Vue 3.",
+  "author": "Saqif Haque",
+  "homepage": "https://github.com/SaqifHoque/vue-shape-shifter-table#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SaqifHoque/vue-shape-shifter-table.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SaqifHoque/vue-shape-shifter-table/issues"
+  },
   "type": "module",
   "module": "dist/vue-shapeshifter-table.js",
   "exports": {
@@ -19,7 +28,9 @@
     "build": "vite build",
     "build:demo": "vite build --mode demo",
     "preview": "vite preview --mode demo",
-    "prepack": "npm run build"
+    "security:audit": "npm audit --audit-level=moderate",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test && npm run security:audit"
   },
   "peerDependencies": {
     "vue": "^3.3.0"

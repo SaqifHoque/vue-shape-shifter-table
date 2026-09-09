@@ -205,7 +205,7 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 
 ### Current limits
 
-The component renders all rows and does not provide pagination, virtualization,
+The component renders all rows unless pagination is enabled. It does not provide virtualization,
 sorting, filtering, validation, or persistent storage. `addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.

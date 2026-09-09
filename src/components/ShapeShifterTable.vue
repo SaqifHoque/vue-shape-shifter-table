@@ -62,7 +62,7 @@
             </td>
           </tr>
 
-          <tr v-for="(row, rowIndex) in localRows" :key="rowKey(row, rowIndex)">
+          <tr v-for="{ row, rowIndex } in visibleRows" :key="rowKey(row, rowIndex)">
             <td v-for="(header, columnIndex) in localHeaders" :key="cellAt(row, columnIndex)?.key || `${rowIndex}-${header.key}`" :class="cellAt(row, columnIndex)?.fixed">
               <div class="sst__cell-layout">
                 <slot name="cell" :cell="cellAt(row, columnIndex)" :header="header" :row-index="rowIndex" :column-index="columnIndex">
@@ -106,6 +106,16 @@
         <button v-if="addable" class="sst__button sst__button--primary" type="button" :disabled="!localHeaders.length" @click="addRow"><span aria-hidden="true">＋</span> Row</button>
       </div>
     </footer>
+    <nav v-if="pagination" class="sst__pagination" aria-label="Table pagination">
+      <label>Rows per page
+        <select :value="localPageSize" @change="changePageSize(Number($event.target.value))">
+          <option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option>
+        </select>
+      </label>
+      <span role="status">{{ localRows.length ? pageStart + 1 : 0 }}–{{ Math.min(pageStart + localPageSize, localRows.length) }} of {{ localRows.length }} rows · Page {{ currentPage }} of {{ pageCount }}</span>
+      <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
+      <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === pageCount" @click="changePage(currentPage + 1)">Next</button>
+    </nav>
   </section>
 </template>
 
@@ -128,11 +138,16 @@ const props = defineProps({
   addable: { type: Boolean, default: true },
   removable: { type: Boolean, default: true },
   compact: { type: Boolean, default: false },
+  pagination: { type: Boolean, default: false },
+  page: { type: Number, default: 1 },
+  pageSize: { type: Number, default: 10 },
+  pageSizeOptions: { type: Array, default: () => [10, 25, 50] },
 })
 
 const emit = defineEmits([
   'update:headers', 'update:tableData', 'add-column', 'add-row', 'delete-column',
   'delete-row', 'move-column', 'header-update', 'cell-update', 'context-events',
+  'update:page', 'update:pageSize',
 ])
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -149,6 +164,46 @@ const editingTarget = ref(null)
 const originalValue = ref('')
 const editorRef = ref(null)
 let sequence = 0
+
+const positiveInteger = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback
+const localPage = ref(positiveInteger(props.page, 1))
+const localPageSize = ref(positiveInteger(props.pageSize, 10))
+const pageCount = computed(() => Math.max(1, Math.ceil(localRows.value.length / localPageSize.value)))
+const currentPage = computed(() => Math.min(localPage.value, pageCount.value))
+const pageStart = computed(() => props.pagination ? (currentPage.value - 1) * localPageSize.value : 0)
+const pageSizes = computed(() => [...new Set([
+  localPageSize.value,
+  ...(Array.isArray(props.pageSizeOptions) ? props.pageSizeOptions : []).filter((size) => positiveInteger(size, 0)),
+])].sort((a, b) => a - b))
+const visibleRows = computed(() => {
+  const start = pageStart.value
+  const rows = props.pagination ? localRows.value.slice(start, start + localPageSize.value) : localRows.value
+  return rows.map((row, index) => ({ row, rowIndex: start + index }))
+})
+
+function changePage(page) {
+  cancelEditing()
+  const next = Math.min(positiveInteger(page, 1), pageCount.value)
+  if (localPage.value !== next) {
+    localPage.value = next
+    emit('update:page', next)
+  }
+}
+function changePageSize(size) {
+  cancelEditing()
+  const next = positiveInteger(size, 10)
+  if (localPageSize.value !== next) {
+    localPageSize.value = next
+    emit('update:pageSize', next)
+  }
+  changePage(1)
+}
+watch(() => props.page, (page) => changePage(page))
+watch(() => props.pageSize, (size) => changePageSize(size))
+watch([pageCount, () => props.pagination], () => {
+  if (props.pagination && localPage.value > pageCount.value) changePage(pageCount.value)
+}, { immediate: true })
+watch(() => props.pagination, () => cancelEditing())
 
 watch(() => props.headers, (headers) => { localHeaders.value = cloneHeaders(headers) }, { deep: true })
 watch(() => props.tableData, (rows) => { localRows.value = cloneRows(rows) }, { deep: true })
@@ -248,6 +303,9 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 </script>
 
 <style scoped>
+.sst__pagination { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; padding: 1rem; border-top: 1px solid var(--sst-line); font-size: .85rem; }
+.sst__pagination label { display: flex; align-items: center; gap: .5rem; }
+.sst__pagination select { padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; background: white; color: inherit; font: inherit; }
 .sst { --sst-accent: #7c3aed; --sst-accent-strong: #5b21b6; --sst-ink: #172033; --sst-muted: #6b7280; --sst-line: #e7e5ee; width: 100%; overflow: hidden; color: var(--sst-ink); background: rgba(255,255,255,.96); border: 1px solid rgba(124,58,237,.14); border-radius: 1.25rem; box-shadow: 0 1.5rem 4rem rgba(37,28,70,.12); font-family: Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
 .sst *, .sst *::before, .sst *::after { box-sizing: border-box; }
 .sst__toolbar, .sst__controls { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem; }

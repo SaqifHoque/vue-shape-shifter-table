@@ -30,8 +30,9 @@ const text = (node) => node.text + node.children.map(text).join('')
 function mount(options = {}) {
   const originalHeaders = [{ field: 'Name', key: 'name' }, { field: 'Role', key: 'role' }]
   const originalRows = [[{ field: 'Maya', key: 'maya' }, { field: 'Designer', key: 'designer' }]]
-  const headers = ref(originalHeaders)
-  const rows = ref(originalRows)
+  const headers = ref(options.headers ?? originalHeaders)
+  const rows = ref(options.rows ?? originalRows)
+  const paginationProps = ref(options.props ?? {})
   const events = []
   const root = element('root')
   const app = createApp({ render: () => h(ShapeShifterTable, {
@@ -41,7 +42,7 @@ function mount(options = {}) {
     onCellUpdate: (value) => events.push(['cell', value]),
     onHeaderUpdate: (value) => events.push(['header', value]),
     onContextEvents: (value) => events.push(['context', value]),
-    ...options.props,
+    ...paginationProps.value,
   }, options.slots) })
   app.mount(root)
   const find = (predicate) => {
@@ -51,8 +52,81 @@ function mount(options = {}) {
   }
   const button = (label) => find((node) => node.type === 'button' && text(node).trim() === label)
   const click = async (label) => { button(label).props.onClick(); await nextTick() }
-  return { root, headers, rows, events, originalHeaders, originalRows, find, button, click, unmount: () => app.unmount() }
+  return { root, headers, rows, events, originalHeaders, originalRows, find, button, click, paginationProps, unmount: () => app.unmount() }
 }
+
+const pagedRows = () => Array.from({ length: 5 }, (_, index) => [
+  { field: `Person ${index + 1}`, key: `person-${index}` },
+  { field: `Role ${index + 1}`, key: `role-${index}` },
+])
+
+test('pagination edits and deletes absolute rows and clamps the final page', async () => {
+  const pages = []
+  const table = mount({ rows: pagedRows(), props: { pagination: true, pageSize: 2, 'onUpdate:page': (page) => pages.push(page) } })
+  assert.equal(table.button('Previous').props.disabled, true)
+  assert.match(text(table.root), /1–2 of 5 rows/)
+  await table.click('Next')
+  await table.click('Person 3')
+  const input = table.find((node) => node.type === 'input')
+  input.props.onInput({ target: { value: 'Edited third' } })
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(table.rows.value[2][0].field, 'Edited third')
+  assert.equal(table.events[0][1].rowIndex, 2)
+  assert.equal(table.rows.value[0][0].field, 'Person 1')
+  await table.click('Next')
+  assert.equal(table.button('Next').props.disabled, true)
+  await table.click('×')
+  assert.equal(table.rows.value.length, 4)
+  assert.match(text(table.root), /Page 2 of 2/)
+  assert.deepEqual(pages, [2, 3, 2])
+  table.unmount()
+})
+
+test('page size and external data changes keep pagination valid', async () => {
+  const sizes = []
+  const table = mount({ rows: pagedRows(), props: { pagination: true, page: 3, pageSize: 2, 'onUpdate:pageSize': (size) => sizes.push(size) } })
+  const select = table.find((node) => node.type === 'select')
+  select.props.onChange({ target: { value: '3' } })
+  await nextTick()
+  assert.deepEqual(sizes, [3])
+  assert.match(text(table.root), /1–3 of 5 rows · Page 1 of 2/)
+  table.paginationProps.value = { pagination: true, page: 2, pageSize: 3 }
+  await nextTick()
+  assert.match(text(table.root), /4–5 of 5 rows/)
+  table.rows.value = []
+  await nextTick()
+  assert.match(text(table.root), /0–0 of 0 rows · Page 1 of 1/)
+  assert.equal(table.button('Next').props.disabled, true)
+  table.unmount()
+})
+
+test('pagination is opt-in and normalizes invalid sizes and pages', async () => {
+  const table = mount({ rows: pagedRows(), props: { pageSize: 2 } })
+  assert.ok(table.button('Person 5'))
+  assert.equal(walk(table.root).some((node) => node.type === 'nav'), false)
+  table.paginationProps.value = { pagination: true, page: Infinity, pageSize: 0, pageSizeOptions: [-1, 0, NaN, 5, 5] }
+  await nextTick()
+  assert.match(text(table.root), /Page 1 of 1/)
+  const options = walk(table.root).filter((node) => node.type === 'option')
+  assert.deepEqual(options.map((node) => node.props.value), [5, 10])
+  table.unmount()
+})
+
+test('page navigation cancels unsaved edits and slots receive absolute indices', async () => {
+  const table = mount({ rows: pagedRows(), props: { pagination: true, pageSize: 2 } })
+  await table.click('Person 1')
+  table.find((node) => node.type === 'input').props.onInput({ target: { value: 'Draft' } })
+  await table.click('Next')
+  await table.click('Previous')
+  assert.ok(table.button('Person 1'))
+  table.unmount()
+  const slotted = mount({ rows: pagedRows(), props: { pagination: true, pageSize: 2, page: 2 },
+    slots: { cell: ({ rowIndex }) => h('span', `Index ${rowIndex}`) } })
+  assert.match(text(slotted.root), /Index 2/)
+  assert.doesNotMatch(text(slotted.root), /Index 0/)
+  slotted.unmount()
+})
 
 test('row and column operations keep parent models aligned without mutating input objects', async () => {
   const table = mount()

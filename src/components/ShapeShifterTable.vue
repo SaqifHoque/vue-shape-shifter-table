@@ -195,8 +195,8 @@ function changePageSize(size) {
   if (localPageSize.value !== next) {
     localPageSize.value = next
     emit('update:pageSize', next)
+    changePage(1)
   }
-  changePage(1)
 }
 watch(() => props.page, (page) => changePage(page))
 watch(() => props.pageSize, (size) => changePageSize(size))

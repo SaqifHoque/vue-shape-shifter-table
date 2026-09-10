@@ -9,11 +9,16 @@
     </header>
 
     <div class="sst__frame" :style="{ maxHeight }">
-      <table class="sst__table">
+      <table ref="tableElement" class="sst__table">
         <thead :class="{ 'sst__head--sticky': stickyHeader }">
           <tr>
-            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :class="header.fixed">
+            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :data-column-index="columnIndex" :class="[header.fixed, { 'sst__drop-target': dropIndex === columnIndex }]">
               <div class="sst__cell-layout">
+                <button v-if="draggableColumns && localHeaders.length > 1" type="button" class="sst__drag-handle"
+                  :aria-label="`Move ${header.field} column`" title="Drag to reorder; use arrow keys to move"
+                  @pointerdown="beginDrag($event, columnIndex)" @pointermove="trackDrag" @pointerup="finishDrag"
+                  @pointercancel="cancelDrag" @lostpointercapture="cancelDrag" @keydown.esc="cancelDrag"
+                  @keydown.left.prevent="moveColumn(columnIndex, -1)" @keydown.right.prevent="moveColumn(columnIndex, 1)">⠿</button>
                 <slot name="header" :header="header" :column-index="columnIndex">
                   <input
                     v-if="editingId === `header-${header.key}`"
@@ -106,6 +111,7 @@
         <button v-if="addable" class="sst__button sst__button--primary" type="button" :disabled="!localHeaders.length" @click="addRow"><span aria-hidden="true">＋</span> Row</button>
       </div>
     </footer>
+    <span class="sst__sr-only" role="status">{{ moveAnnouncement }}</span>
     <nav v-if="pagination" class="sst__pagination" aria-label="Table pagination">
       <label>Rows per page
         <select :value="localPageSize" @change="changePageSize(Number($event.target.value))">
@@ -120,7 +126,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 
 defineOptions({ name: 'ShapeShifterTable' })
 
@@ -138,6 +144,7 @@ const props = defineProps({
   addable: { type: Boolean, default: true },
   removable: { type: Boolean, default: true },
   compact: { type: Boolean, default: false },
+  draggableColumns: { type: Boolean, default: false },
   pagination: { type: Boolean, default: false },
   page: { type: Number, default: 1 },
   pageSize: { type: Number, default: 10 },
@@ -164,6 +171,38 @@ const editingTarget = ref(null)
 const originalValue = ref('')
 const editorRef = ref(null)
 let sequence = 0
+const tableElement = shallowRef(null)
+const dropIndex = ref(null)
+const moveAnnouncement = ref('')
+let drag = null
+function cancelDrag() {
+  drag = null
+  dropIndex.value = null
+}
+function beginDrag(event, index) {
+  if (!props.draggableColumns || event.button !== 0 || event.isPrimary === false) return
+  cancelEditing()
+  drag = { index, pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+function trackDrag(event) {
+  if (!drag || event.pointerId !== drag.pointerId) return
+  if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return
+  const table = tableElement.value
+  const hit = table?.ownerDocument.elementFromPoint(event.clientX, event.clientY)
+  const heading = hit?.closest('th[data-column-index]')
+  dropIndex.value = heading?.closest('table') === table ? Number(heading.dataset.columnIndex) : null
+}
+function finishDrag(event) {
+  if (!drag || event.pointerId !== drag.pointerId) return
+  trackDrag(event)
+  const from = drag.index
+  const to = dropIndex.value
+  cancelDrag()
+  if (to !== null) reorderColumn(from, to)
+}
+watch(() => props.draggableColumns, cancelDrag)
+watch(() => props.headers, cancelDrag, { deep: true })
 
 const positiveInteger = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback
 const localPage = ref(positiveInteger(props.page, 1))
@@ -261,6 +300,7 @@ function finishCellEditing(rowIndex, columnIndex) {
   emit('cell-update', { key: cell.key, value: cell.field, editKey: cell.editKey, rowIndex, columnIndex })
 }
 function addColumn() {
+  cancelDrag()
   const columnIndex = localHeaders.value.length
   const header = { field: `Column ${columnIndex + 1}`, key: nextKey('column'), editable: true }
   localHeaders.value.push(header)
@@ -277,6 +317,7 @@ function addRow() {
   emit('add-row', { row, rowIndex })
 }
 function removeColumn(columnIndex) {
+  cancelDrag()
   const [header] = localHeaders.value.splice(columnIndex, 1)
   localRows.value.forEach((row) => row.splice(columnIndex, 1))
   publish()
@@ -288,21 +329,33 @@ function removeRow(rowIndex) {
   emit('delete-row', { row, rowIndex })
 }
 function moveColumn(columnIndex, direction) {
-  const destination = columnIndex + direction
-  if (destination < 0 || destination >= localHeaders.value.length) return
+  reorderColumn(columnIndex, columnIndex + direction)
+}
+function reorderColumn(columnIndex, destination) {
+  cancelDrag()
+  if (!Number.isInteger(columnIndex) || !Number.isInteger(destination) || columnIndex < 0 || columnIndex >= localHeaders.value.length || destination < 0 || destination >= localHeaders.value.length || destination === columnIndex) return
+  cancelEditing()
+  const columnCount = localHeaders.value.length
   const [header] = localHeaders.value.splice(columnIndex, 1)
   localHeaders.value.splice(destination, 0, header)
   localRows.value.forEach((row) => {
+    // Preserve empty column positions when consumers supply short rows.
+    while (row.length < columnCount) row.push(undefined)
     const [cell] = row.splice(columnIndex, 1)
     row.splice(destination, 0, cell)
   })
   publish()
+  moveAnnouncement.value = `${header.field} moved to column ${destination + 1}`
   emit('move-column', { from: columnIndex, to: destination })
 }
 function emitContext(event, menuId, type) { emit('context-events', { event, menu_id: menuId, type }) }
 </script>
 
 <style scoped>
+.sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }
+.sst__drag-handle:active { cursor: grabbing; }
+.sst__drag-handle:focus-visible { outline: 2px solid var(--sst-accent); }
+.sst thead th.sst__drop-target { box-shadow: inset 0 0 0 2px var(--sst-accent); }
 .sst__pagination { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; padding: 1rem; border-top: 1px solid var(--sst-line); font-size: .85rem; }
 .sst__pagination label { display: flex; align-items: center; gap: .5rem; }
 .sst__pagination select { padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; background: white; color: inherit; font: inherit; }

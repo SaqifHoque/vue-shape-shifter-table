@@ -35,7 +35,8 @@
 
 <script setup>
 import { ref } from 'vue'
-import ShapeShifterTable from './components/ShapeShifterTable.vue'
+import { ShapeShifterTable } from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
 
 const headers = ref([
   { field: 'Project', key: 'project', editable: true }, { field: 'Owner', key: 'owner', editable: true },

@@ -17,15 +17,17 @@
     ".": "./dist/vue-shapeshifter-table.js",
     "./style.css": "./dist/vue-shapeshifter-table.css"
   },
-  "files": ["dist"],
+  "files": ["dist", "SECURITY.md"],
   "sideEffects": ["**/*.css"],
   "keywords": ["vue", "vue3", "table", "data-grid", "editable-table", "responsive-table"],
   "license": "MIT",
   "publishConfig": { "access": "public" },
   "scripts": {
+    "predev": "npm run build",
     "dev": "vite",
     "test": "npm run build && node --test tests/*.test.mjs",
     "build": "vite build",
+    "prebuild:demo": "npm run build",
     "build:demo": "vite build --mode demo",
     "preview": "vite preview --mode demo",
     "security:audit": "npm audit --audit-level=moderate",

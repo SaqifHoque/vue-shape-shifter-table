@@ -60,6 +60,48 @@ const pagedRows = () => Array.from({ length: 5 }, (_, index) => [
   { field: `Role ${index + 1}`, key: `role-${index}` },
 ])
 
+test('pointer dragging moves non-adjacent columns across all pages', async () => {
+  const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })),
+    rows: [[{ field: 'a' }, { field: 'b' }, { field: 'c' }], [{ field: 'd' }]],
+    props: { draggableColumns: true, pagination: true, pageSize: 1 } })
+  const grid = table.find((node) => node.type === 'table')
+  grid.ownerDocument = { elementFromPoint: () => ({ closest: () => ({ dataset: { columnIndex: '2' }, closest: () => grid }) }) }
+  const handle = table.find((node) => node.props['aria-label'] === 'Move A column')
+  const event = { pointerId: 1, button: 0, isPrimary: true, clientX: 0, clientY: 0, currentTarget: { setPointerCapture() {} } }
+  handle.props.onPointerdown(event)
+  handle.props.onPointermove({ ...event, clientX: 100 })
+  await nextTick()
+  handle.props.onPointerup({ ...event, clientX: 100 })
+  await nextTick()
+  assert.deepEqual(table.headers.value.map((column) => column.field), ['B', 'C', 'A'])
+  assert.deepEqual(table.rows.value[0].map((cell) => cell.field), ['b', 'c', 'a'])
+  assert.equal(table.rows.value[1][2].field, 'd')
+  assert.match(text(table.root), /A moved to column 3/)
+  table.unmount()
+})
+
+test('drag cancellation, foreign targets, and keyboard movement', async () => {
+  const table = mount({ props: { draggableColumns: true } })
+  const handle = table.find((node) => node.props['aria-label'] === 'Move Name column')
+  const grid = table.find((node) => node.type === 'table')
+  grid.ownerDocument = { elementFromPoint: () => null }
+  const event = { pointerId: 1, button: 0, clientX: 0, clientY: 0, currentTarget: { setPointerCapture() {} } }
+  handle.props.onPointerdown(event)
+  handle.props.onPointercancel()
+  handle.props.onPointerup({ ...event, clientX: 100 })
+  handle.props.onPointerdown(event)
+  handle.props.onPointerup({ ...event, clientX: 100 })
+  await nextTick()
+  assert.equal(table.headers.value[0].field, 'Name')
+  for (const handler of handle.props.onKeydown) handler({ key: 'ArrowRight', preventDefault() {} })
+  await nextTick()
+  assert.equal(table.headers.value[0].field, 'Role')
+  table.unmount()
+  const disabled = mount()
+  assert.equal(walk(disabled.root).some((node) => node.props.class === 'sst__drag-handle'), false)
+  disabled.unmount()
+})
+
 test('pagination edits and deletes absolute rows and clamps the final page', async () => {
   const pages = []
   const table = mount({ rows: pagedRows(), props: { pagination: true, pageSize: 2, 'onUpdate:page': (page) => pages.push(page) } })

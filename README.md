@@ -1,5 +1,13 @@
 # Vue Shapeshifter Table
 
+## Drag-and-drop columns
+
+Enable `draggable-columns` on `ShapeShifterTable` to display drag handles. Drag a handle onto another heading to move its column to that position; the target heading is highlighted. Pointer events support mouse, touch, and pen. Moving a column also moves its cells in every row, including rows hidden by pagination.
+
+Focus a handle and press Left or Right to move using the keyboard. Escape, pointer cancellation, or dropping outside this table cancels a drag. The existing Move left/right menu actions remain available. Reordering emits `update:headers`, `update:tableData`, and `move-column` with zero-based `{ from, to }` indices. Bind both data models to retain changes.
+
+Dragging is off by default and adds no dependencies. This implementation does not auto-scroll the table during a drag; use the move buttons or scroll before dragging to a distant column.
+
 ## Pagination
 
 Pagination is optional and off by default. Enable it to render a page of the supplied rows while retaining the full array in `v-model:table-data`:

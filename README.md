@@ -1,5 +1,26 @@
 # Vue Shapeshifter Table
 
+## Pagination
+
+Pagination is optional and off by default. Enable it to render a page of the supplied rows while retaining the full array in `v-model:table-data`:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  v-model:page="page"
+  v-model:page-size="pageSize"
+  pagination
+  :page-size-options="[10, 25, 50]"
+/>
+```
+
+Initialize `page` with `ref(1)` and `pageSize` with `ref(10)`. These bindings are optional: the component also maintains page state internally. `page` is one-based; `pageSize` defaults to 10. Invalid numbers fall back to 1 and 10 respectively. The current page size is always included in the selector.
+
+Changing the page size returns to page 1. Deleting rows or replacing the dataset clamps the page to the last available page. Empty tables show page 1 of 1 with navigation disabled. Added rows are appended to the dataset without moving the current page. Cell events and slot `rowIndex` values always refer to the full dataset, not the visible page. Navigation cancels any draft still open; ordinary input blur saves edits as before.
+
+This is client-side pagination, not server-side fetching or virtualization: all supplied rows remain in memory. No additional runtime dependencies are required.
+
 A lightweight, editable table component for Vue 3.
 
 Edit cells and headings, add or remove rows and columns, and move columns together
@@ -184,7 +205,7 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 
 ### Current limits
 
-The component renders all rows and does not provide pagination, virtualization,
+The component renders all rows unless pagination is enabled. It does not provide virtualization,
 sorting, filtering, validation, or persistent storage. `addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.

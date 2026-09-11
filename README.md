@@ -1,5 +1,26 @@
 # Vue Shapeshifter Table
 
+## TypeScript
+
+The package includes declarations for the named component, default plugin, props, events, and slots. No separate `@types` package is needed. Use Vue 3.3+ and TypeScript 5+ with `moduleResolution: "Bundler"` or `"NodeNext"`.
+
+```ts
+import { ref } from 'vue'
+import { ShapeShifterTable, type TableHeader, type TableRow, type CellUpdate } from 'vue-shapeshifter-table'
+
+const headers = ref<TableHeader[]>([{ key: 'name', field: 'Name' }])
+const rows = ref<TableRow[]>([[{ key: 'ada', field: 'Ada' }]])
+function onCellUpdate(event: CellUpdate) {
+  console.log(event.rowIndex, event.columnIndex, event.value)
+}
+```
+
+Additional exported types include `ShapeShifterTableProps`, `TableCell`, `TableKey`, `TableFooter`, `TableMenuItem`, `TableSlots`, `TableEventPayloads`, `TableEmits`, `HeaderUpdate`, `ColumnChange`, `RowChange`, `ColumnMove`, and `ContextEvent`.
+
+Cell fields and custom metadata are `unknown`: narrow or format them before use. Edits normally produce strings, but blurring an unchanged field preserves its original value. Short rows may have missing cells, so slot consumers should use `cell?.field`. All event/slot row indices refer to the complete dataset, including when paginated. The plugin registers the component at runtime; import the named component in typed SFCs for template inference.
+
+Run `npm run test:types` for local Vue consumer checks. `npm test` also extracts the npm tarball and checks TypeScript and Vue consumers against its exported declarations using both Bundler and NodeNext resolution. The declarations add no JavaScript or runtime dependencies.
+
 ## Drag-and-drop columns
 
 Enable `draggable-columns` on `ShapeShifterTable` to display drag handles. Drag a handle onto another heading to move its column to that position; the target heading is highlighted. Pointer events support mouse, touch, and pen. Moving a column also moves its cells in every row, including rows hidden by pagination.
@@ -110,13 +131,13 @@ Column menus move columns left or right together with their cells. Custom menu a
 
 | Slot | Slot props |
 | --- | --- |
-| `toolbar` | `add-column`, `add-row` |
-| `header` | `header`, `column-index` |
-| `cell` | `cell`, `header`, `row-index`, `column-index` |
+| `toolbar` | `addColumn`, `addRow` |
+| `header` | `header`, `columnIndex` |
+| `cell` | `cell`, `header`, `rowIndex`, `columnIndex` |
 | `empty` | None |
 | `footer` | `footers` |
 
-Slot props with multiple words are exposed using kebab-case names (`column-index`, `row-index`, `add-column`, `add-row`). Custom header and cell slots replace the default editing controls. The table provides scoped styles, horizontal scrolling, and reduced-motion support.
+Slot props with multiple words are exposed using camelCase names (`columnIndex`, `rowIndex`, `addColumn`, `addRow`). Custom header and cell slots replace the default editing controls. The table provides scoped styles, horizontal scrolling, and reduced-motion support.
 
 ## Examples
 
@@ -155,7 +176,7 @@ Use this template with the `headers` and `rows` refs from the quick start:
   :addable="false"
 >
   <template #toolbar="actions">
-    <button type="button" @click="actions['add-row']()">Add person</button>
+    <button type="button" @click="actions.addRow()">Add person</button>
   </template>
   <template #cell="{ cell }">
     <strong>{{ cell?.field }}</strong>

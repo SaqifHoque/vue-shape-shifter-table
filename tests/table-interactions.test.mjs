@@ -232,6 +232,23 @@ test('custom slots and legacy context events remain available', async () => {
   table.unmount()
 })
 
+test('typed slot names match compiled runtime props and toolbar actions', async () => {
+  const table = mount({ slots: {
+    toolbar: ({ addColumn, addRow }) => [h('button', { onClick: addColumn }, 'Typed column'), h('button', { onClick: addRow }, 'Typed row')],
+    header: ({ header, columnIndex }) => h('span', `Heading ${columnIndex}: ${String(header.field)}`),
+    cell: ({ cell, rowIndex, columnIndex }) => h('span', `Cell ${rowIndex},${columnIndex}: ${String(cell?.field)}`),
+    footer: ({ footers }) => h('span', `Footers: ${footers.length}`),
+  } })
+  assert.match(text(table.root), /Heading 0: Name/)
+  assert.match(text(table.root), /Cell 0,1: Designer/)
+  assert.match(text(table.root), /Footers: 0/)
+  await table.click('Typed column')
+  await table.click('Typed row')
+  assert.equal(table.headers.value.length, 3)
+  assert.equal(table.rows.value.length, 2)
+  table.unmount()
+})
+
 test('empty tables disable adding rows and expose the empty slot', () => {
   const table = mount({ props: { headers: [], tableData: [] }, slots: { empty: () => h('span', 'No records') } })
   assert.equal(table.button('＋ Row').props.disabled, true)

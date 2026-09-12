@@ -13,19 +13,38 @@
   },
   "type": "module",
   "module": "dist/vue-shapeshifter-table.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/vue-shapeshifter-table.js",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/vue-shapeshifter-table.js"
+    },
     "./style.css": "./dist/vue-shapeshifter-table.css"
   },
-  "files": ["dist", "SECURITY.md"],
-  "sideEffects": ["**/*.css"],
-  "keywords": ["vue", "vue3", "table", "data-grid", "editable-table", "responsive-table"],
+  "files": [
+    "dist",
+    "SECURITY.md"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "keywords": [
+    "vue",
+    "vue3",
+    "table",
+    "data-grid",
+    "editable-table",
+    "responsive-table"
+  ],
   "license": "MIT",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "predev": "npm run build",
     "dev": "vite",
     "test": "npm run build && node --test tests/*.test.mjs",
+    "test:types": "npm run build && vue-tsc -p tests/types/tsconfig.json",
     "build": "vite build",
     "prebuild:demo": "npm run build",
     "build:demo": "vite build --mode demo",
@@ -39,7 +58,9 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
+    "typescript": "~5.9.3",
     "vite": "^8.2.2",
-    "vue": "^3.5.20"
+    "vue": "^3.5.20",
+    "vue-tsc": "^3.3.11"
   }
 }

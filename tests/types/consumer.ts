@@ -18,6 +18,11 @@ void slots
 type Instance = InstanceType<typeof ShapeShifterTable>
 declare const instance: Instance
 instance.$emit('update:page', 2)
+instance.$emit('update:sort', { key: 'name', direction: 'asc' })
+instance.$emit('update:sort', null)
+instance.$emit('update:filter', 'Ada')
+// @ts-expect-error invalid sort direction
+instance.$emit('update:sort', { key: 'name', direction: 'up' })
 instance.$emit('move-column', { from: 0, to: 2 })
 instance.$emit('cell-update', { key: undefined, value: 'Edited', editKey: undefined, rowIndex: 10, columnIndex: 0 })
 
@@ -25,7 +30,7 @@ instance.$emit('cell-update', { key: undefined, value: 'Edited', editKey: undefi
 // @ts-expect-error page numbers must be numeric
 const invalidProps: ShapeShifterTableProps = { page: '2' }
 // @ts-expect-error unknown prop
-const invalidOption: ShapeShifterTableProps = { sortable: true }
+const invalidOption: ShapeShifterTableProps = { unsupportedOption: true }
 // @ts-expect-error cells are object records
 const invalidRows: TableRow[] = [['text']]
 // @ts-expect-error event payload is numeric

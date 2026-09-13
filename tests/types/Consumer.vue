@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ShapeShifterTable, type TableHeader, type TableRow, type CellUpdate } from 'vue-shapeshifter-table'
+import { ShapeShifterTable, type TableHeader, type TableRow, type CellUpdate, type TableSort } from 'vue-shapeshifter-table'
 
 const headers = ref<TableHeader[]>([{ key: 'name', field: 'Name' }])
 const rows = ref<TableRow[]>([[{ field: 'Ada' }]])
 const page = ref(1)
 const pageSize = ref(10)
+const sort = ref<TableSort | null>(null)
+const filter = ref('')
 function onEdit(payload: CellUpdate) { rows.value[payload.rowIndex][payload.columnIndex] = { field: payload.value } }
 </script>
 
 <template>
   <ShapeShifterTable v-model:headers="headers" v-model:table-data="rows"
-    v-model:page="page" v-model:page-size="pageSize" pagination draggable-columns @cell-update="onEdit">
+    v-model:page="page" v-model:page-size="pageSize" v-model:sort="sort" v-model:filter="filter"
+    sortable filterable pagination draggable-columns @cell-update="onEdit">
     <template #cell="{ cell, rowIndex, columnIndex }">
       {{ rowIndex.toFixed() }}:{{ columnIndex.toFixed() }} {{ cell?.field }}
     </template>

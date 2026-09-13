@@ -8,12 +8,18 @@
       <slot name="toolbar" :add-column="addColumn" :add-row="addRow" />
     </header>
 
+    <div v-if="filterable" class="sst__search">
+      <label>Search table <input type="search" :value="localFilter" @input="changeFilter($event.target.value)" /></label>
+      <button v-if="localFilter" class="sst__button sst__button--secondary" type="button" @click="changeFilter('')">Clear search</button>
+      <span role="status">{{ resultCount }} of {{ localRows.length }} rows match</span>
+    </div>
     <div class="sst__frame" :style="{ maxHeight }">
       <table ref="tableElement" class="sst__table">
         <thead :class="{ 'sst__head--sticky': stickyHeader }">
           <tr>
-            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :data-column-index="columnIndex" :class="[header.fixed, { 'sst__drop-target': dropIndex === columnIndex }]">
+            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :aria-sort="sortable ? sortDirection(header.key) : undefined" :data-column-index="columnIndex" :class="[header.fixed, { 'sst__drop-target': dropIndex === columnIndex }]">
               <div class="sst__cell-layout">
+                <button v-if="sortable" class="sst__sort-button" type="button" :aria-label="`Sort ${header.field}`" @click="toggleSort(header.key)">{{ sortDirection(header.key) === 'ascending' ? '↑' : sortDirection(header.key) === 'descending' ? '↓' : '↕' }}</button>
                 <button v-if="draggableColumns && localHeaders.length > 1" type="button" class="sst__drag-handle"
                   :aria-label="`Move ${header.field} column`" title="Drag to reorder; use arrow keys to move"
                   @pointerdown="beginDrag($event, columnIndex)" @pointermove="trackDrag" @pointerup="finishDrag"
@@ -24,7 +30,7 @@
                     v-if="editingId === `header-${header.key}`"
                     :ref="setEditorRef"
                     class="sst__editor sst__editor--header"
-                    :value="header.field"
+                    :value="draftValue"
                     :aria-label="`Edit ${header.field || 'column'} heading`"
                     @input="updateHeaderDraft(columnIndex, $event)"
                     @keydown.enter="finishEditing"
@@ -57,12 +63,12 @@
         </thead>
 
         <tbody>
-          <tr v-if="!localRows.length">
+          <tr v-if="!resultCount">
             <td class="sst__empty" :colspan="Math.max(localHeaders.length + (removable ? 1 : 0), 1)">
               <slot name="empty">
                 <span class="sst__empty-icon">✦</span>
-                <strong>{{ emptyText }}</strong>
-                <span>Add a row to start shaping your table.</span>
+                <strong>{{ localRows.length ? 'No matching rows' : emptyText }}</strong>
+                <span>{{ localRows.length ? 'Try a different search.' : 'Add a row to start shaping your table.' }}</span>
               </slot>
             </td>
           </tr>
@@ -75,7 +81,7 @@
                     v-if="editingId === cellId(rowIndex, columnIndex)"
                     :ref="setEditorRef"
                     class="sst__editor"
-                    :value="cellAt(row, columnIndex)?.field"
+                    :value="draftValue"
                     :aria-label="`Edit row ${rowIndex + 1}, ${header.field}`"
                     @input="updateCellDraft(rowIndex, columnIndex, $event)"
                     @keydown.enter="finishEditing"
@@ -118,7 +124,7 @@
           <option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option>
         </select>
       </label>
-      <span role="status">{{ localRows.length ? pageStart + 1 : 0 }}–{{ Math.min(pageStart + localPageSize, localRows.length) }} of {{ localRows.length }} rows · Page {{ currentPage }} of {{ pageCount }}</span>
+      <span role="status">{{ resultCount ? pageStart + 1 : 0 }}–{{ Math.min(pageStart + localPageSize, resultCount) }} of {{ resultCount }} rows · Page {{ currentPage }} of {{ pageCount }}</span>
       <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
       <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === pageCount" @click="changePage(currentPage + 1)">Next</button>
     </nav>
@@ -149,12 +155,17 @@ const props = defineProps({
   page: { type: Number, default: 1 },
   pageSize: { type: Number, default: 10 },
   pageSizeOptions: { type: Array, default: () => [10, 25, 50] },
+  sortable: { type: Boolean, default: false },
+  filterable: { type: Boolean, default: false },
+  sort: { type: Object, default: null },
+  filter: { type: String, default: '' },
 })
 
 const emit = defineEmits([
   'update:headers', 'update:tableData', 'add-column', 'add-row', 'delete-column',
   'delete-row', 'move-column', 'header-update', 'cell-update', 'context-events',
   'update:page', 'update:pageSize',
+  'update:sort', 'update:filter',
 ])
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -168,7 +179,7 @@ const localHeaders = ref(cloneHeaders(props.headers))
 const localRows = ref(cloneRows(props.tableData))
 const editingId = ref(null)
 const editingTarget = ref(null)
-const originalValue = ref('')
+const draftValue = ref('')
 const editorRef = ref(null)
 let sequence = 0
 const tableElement = shallowRef(null)
@@ -207,7 +218,32 @@ watch(() => props.headers, cancelDrag, { deep: true })
 const positiveInteger = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback
 const localPage = ref(positiveInteger(props.page, 1))
 const localPageSize = ref(positiveInteger(props.pageSize, 10))
-const pageCount = computed(() => Math.max(1, Math.ceil(localRows.value.length / localPageSize.value)))
+const normalizeSort = (sort) => sort && ['string', 'number'].includes(typeof sort.key) && ['asc', 'desc'].includes(sort.direction)
+  ? { key: sort.key, direction: sort.direction } : null
+const localSort = ref(normalizeSort(props.sort))
+const localFilter = ref(typeof props.filter === 'string' ? props.filter : '')
+const scalarText = (value) => ['string', 'number', 'boolean', 'bigint'].includes(typeof value) ? String(value) : ''
+const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
+const processedRows = computed(() => {
+  const query = props.filterable ? localFilter.value.trim().toLowerCase() : ''
+  const rows = localRows.value.map((row, rowIndex) => ({ row, rowIndex })).filter(({ row }) =>
+    !query || localHeaders.value.some((_, index) => scalarText(row[index]?.field).toLowerCase().includes(query)))
+  const column = props.sortable && localSort.value ? localHeaders.value.findIndex((header) => header.key === localSort.value.key) : -1
+  if (column >= 0) rows.sort((a, b) => {
+    const left = a.row[column]?.field
+    const right = b.row[column]?.field
+    const leftText = scalarText(left)
+    const rightText = scalarText(right)
+    // Empty and unsupported values remain last in either direction.
+    if (!leftText || !rightText) return Number(!leftText) - Number(!rightText) || a.rowIndex - b.rowIndex
+    const comparison = typeof left === 'number' && typeof right === 'number' && Number.isFinite(left) && Number.isFinite(right)
+      ? left - right : collator.compare(leftText, rightText)
+    return comparison * (localSort.value.direction === 'asc' ? 1 : -1) || a.rowIndex - b.rowIndex
+  })
+  return rows
+})
+const resultCount = computed(() => processedRows.value.length)
+const pageCount = computed(() => Math.max(1, Math.ceil(resultCount.value / localPageSize.value)))
 const currentPage = computed(() => Math.min(localPage.value, pageCount.value))
 const pageStart = computed(() => props.pagination ? (currentPage.value - 1) * localPageSize.value : 0)
 const pageSizes = computed(() => [...new Set([
@@ -216,8 +252,35 @@ const pageSizes = computed(() => [...new Set([
 ])].sort((a, b) => a - b))
 const visibleRows = computed(() => {
   const start = pageStart.value
-  const rows = props.pagination ? localRows.value.slice(start, start + localPageSize.value) : localRows.value
-  return rows.map((row, index) => ({ row, rowIndex: start + index }))
+  return props.pagination ? processedRows.value.slice(start, start + localPageSize.value) : processedRows.value
+})
+
+function sortDirection(key) {
+  return localSort.value?.key === key ? (localSort.value.direction === 'asc' ? 'ascending' : 'descending') : 'none'
+}
+function changeSort(sort) {
+  const next = normalizeSort(sort)
+  if (next?.key === localSort.value?.key && next?.direction === localSort.value?.direction) return
+  localSort.value = next
+  changePage(1)
+  emit('update:sort', next ? { ...next } : null)
+}
+function toggleSort(key) {
+  changeSort(localSort.value?.key !== key ? { key, direction: 'asc' }
+    : localSort.value.direction === 'asc' ? { key, direction: 'desc' } : null)
+}
+function changeFilter(filter) {
+  const next = typeof filter === 'string' ? filter : ''
+  if (next === localFilter.value) return
+  localFilter.value = next
+  changePage(1)
+  emit('update:filter', next)
+}
+watch(() => props.sort, changeSort, { deep: true })
+watch(() => props.filter, changeFilter)
+watch([() => props.sortable, () => props.filterable], () => changePage(1))
+watch(() => localHeaders.value.map((header) => header.key), (keys) => {
+  if (localSort.value && !keys.includes(localSort.value.key)) changeSort(null)
 })
 
 function changePage(page) {
@@ -244,8 +307,8 @@ watch([pageCount, () => props.pagination], () => {
 }, { immediate: true })
 watch(() => props.pagination, () => cancelEditing())
 
-watch(() => props.headers, (headers) => { localHeaders.value = cloneHeaders(headers) }, { deep: true })
-watch(() => props.tableData, (rows) => { localRows.value = cloneRows(rows) }, { deep: true })
+watch(() => props.headers, (headers) => { cancelEditing(); localHeaders.value = cloneHeaders(headers) }, { deep: true })
+watch(() => props.tableData, (rows) => { cancelEditing(); localRows.value = cloneRows(rows) }, { deep: true })
 
 const showColumnActions = computed(() => props.removable || props.contextMenuColumn.length > 0 || localHeaders.value.length > 1)
 const cellAt = (row, columnIndex) => row[columnIndex]
@@ -262,7 +325,7 @@ function publish() {
 function startEditing(id, target) {
   editingId.value = id
   editingTarget.value = target
-  originalValue.value = target?.field ?? ''
+  draftValue.value = target?.field
   nextTick(() => {
     editorRef.value?.focus()
     editorRef.value?.select()
@@ -277,25 +340,26 @@ function startCellEditing(rowIndex, columnIndex) {
 
 function finishEditing() { editorRef.value?.blur() }
 function cancelEditing() {
-  if (editingTarget.value) editingTarget.value.field = originalValue.value
   editingId.value = null
   editingTarget.value = null
 }
-function updateHeaderDraft(columnIndex, event) { localHeaders.value[columnIndex].field = event.target.value }
+function updateHeaderDraft(columnIndex, event) { draftValue.value = event.target.value }
 function finishHeaderEditing(columnIndex, header) {
   if (editingId.value !== `header-${header.key}`) return
   editingId.value = null
   editingTarget.value = null
+  header.field = draftValue.value
   publish()
   const payload = { key: header.key, value: header.field, editKey: header.editKey, columnIndex }
   emit('header-update', payload)
 }
-function updateCellDraft(rowIndex, columnIndex, event) { localRows.value[rowIndex][columnIndex].field = event.target.value }
+function updateCellDraft(rowIndex, columnIndex, event) { draftValue.value = event.target.value }
 function finishCellEditing(rowIndex, columnIndex) {
   if (editingId.value !== cellId(rowIndex, columnIndex)) return
   editingId.value = null
   editingTarget.value = null
   const cell = localRows.value[rowIndex][columnIndex]
+  cell.field = draftValue.value
   publish()
   emit('cell-update', { key: cell.key, value: cell.field, editKey: cell.editKey, rowIndex, columnIndex })
 }
@@ -352,6 +416,12 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 </script>
 
 <style scoped>
+.sst__search { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: 1rem; border-bottom: 1px solid var(--sst-line); }
+.sst__search label { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.sst__search input { min-width: 0; max-width: 100%; padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; font: inherit; }
+.sst__search span { font-size: .85rem; }
+.sst__sort-button { min-width: 2rem; min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; }
+.sst__sort-button:focus-visible { outline: 2px solid var(--sst-accent); }
 .sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }
 .sst__drag-handle:active { cursor: grabbing; }
 .sst__drag-handle:focus-visible { outline: 2px solid var(--sst-accent); }

@@ -60,6 +60,90 @@ const pagedRows = () => Array.from({ length: 5 }, (_, index) => [
   { field: `Role ${index + 1}`, key: `role-${index}` },
 ])
 
+const visibleNames = (table) => walk(table.root).filter((node) => node.type === 'tbody')
+  .flatMap((body) => walk(body).filter((node) => node.type === 'button' && node.props.class === 'sst__text-button')).map(text)
+const clickSort = async (table, label) => {
+  table.find((node) => node.props['aria-label'] === `Sort ${label}`).props.onClick()
+  await nextTick()
+}
+const search = async (table, value) => {
+  table.find((node) => node.props.type === 'search').props.onInput({ target: { value } })
+  await nextTick()
+}
+
+test('sort cycles numeric values stably without reordering parent data', async () => {
+  const changes = []
+  const table = mount({ headers: [{ key: 0, field: 'Score' }],
+    rows: [10, 2, 2, null, -1].map((field, index) => [{ key: index, field }]),
+    props: { sortable: true, 'onUpdate:sort': (value) => changes.push(value) } })
+  await clickSort(table, 'Score')
+  assert.deepEqual(visibleNames(table), ['-1', '2', '2', '10', ''])
+  assert.deepEqual(table.rows.value.map((row) => row[0].field), [10, 2, 2, null, -1])
+  assert.equal(table.find((node) => node.type === 'th').props['aria-sort'], 'ascending')
+  await clickSort(table, 'Score')
+  assert.deepEqual(visibleNames(table), ['10', '2', '2', '-1', ''])
+  await clickSort(table, 'Score')
+  assert.deepEqual(visibleNames(table), ['10', '2', '2', '', '-1'])
+  assert.deepEqual(changes, [{ key: 0, direction: 'asc' }, { key: 0, direction: 'desc' }, null])
+  table.unmount()
+})
+
+test('filtering happens before pagination and edit/delete use source indices', async () => {
+  const table = mount({ rows: pagedRows(), props: { sortable: true, filterable: true, pagination: true, pageSize: 2 } })
+  await clickSort(table, 'Name')
+  await clickSort(table, 'Name')
+  assert.deepEqual(visibleNames(table), ['Person 5', 'Role 5', 'Person 4', 'Role 4'])
+  await table.click('Next')
+  await search(table, '  PERSON 3 ')
+  assert.match(text(table.root), /1–1 of 1 rows · Page 1 of 1/)
+  await table.click('Person 3')
+  const input = table.find((node) => node.type === 'input' && node.props.type !== 'search')
+  input.props.onInput({ target: { value: 'Changed' } })
+  await nextTick()
+  // A draft must stay visible while typing even if it stops matching the query.
+  assert.ok(input.parent)
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(table.rows.value[2][0].field, 'Changed')
+  assert.equal(table.events[0][1].rowIndex, 2)
+  assert.match(text(table.root), /No matching rows/)
+  await search(table, 'role 4')
+  await table.click('×')
+  assert.equal(table.rows.value.length, 4)
+  assert.equal(table.rows.value.some((row) => row[0].field === 'Person 4'), false)
+  await table.click('Clear search')
+  assert.match(text(table.root), /1–2 of 4 rows/)
+  table.unmount()
+})
+
+test('sort follows column keys through reordering and clears on column deletion', async () => {
+  const changes = []
+  const table = mount({ rows: pagedRows(), props: { sortable: true, 'onUpdate:sort': (value) => changes.push(value) } })
+  await clickSort(table, 'Name')
+  await clickSort(table, 'Name')
+  await table.click('Move right')
+  assert.deepEqual(visibleNames(table).slice(0, 2), ['Role 5', 'Person 5'])
+  const nameMenu = walk(table.root).filter((node) => node.type === 'th')[1]
+  walk(nameMenu).find((node) => node.type === 'button' && text(node) === 'Delete column').props.onClick()
+  await nextTick()
+  assert.equal(changes.at(-1), null)
+  assert.deepEqual(visibleNames(table).slice(0, 2), ['Role 1', 'Role 2'])
+  table.unmount()
+})
+
+test('external criteria and data replacement update view; disabled features preserve defaults', async () => {
+  const table = mount({ rows: pagedRows(), props: { filter: 'missing', sort: { key: 'name', direction: 'desc' } } })
+  assert.deepEqual(visibleNames(table).slice(0, 2), ['Person 1', 'Role 1'])
+  table.paginationProps.value = { filterable: true, sortable: true, filter: 'role 2', sort: { key: 'name', direction: 'asc' } }
+  await nextTick()
+  assert.deepEqual(visibleNames(table), ['Person 2', 'Role 2'])
+  table.rows.value = []
+  await nextTick()
+  assert.equal(visibleNames(table).length, 0)
+  assert.match(text(table.root), /Your table is ready/)
+  table.unmount()
+})
+
 test('pointer dragging moves non-adjacent columns across all pages', async () => {
   const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })),
     rows: [[{ field: 'a' }, { field: 'b' }, { field: 'c' }], [{ field: 'd' }]],

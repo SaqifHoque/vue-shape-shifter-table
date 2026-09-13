@@ -10,6 +10,11 @@
     <ShapeShifterTable
       v-model:headers="headers"
       v-model:table-data="rows"
+      sortable
+      filterable
+      pagination
+      :page-size="2"
+      :page-size-options="[2, 10, 25]"
       title="Product launch board"
       eyebrow="Live workspace"
       :footers="[{ field: 'Click any value to edit. Changes last until you refresh the page.' }]"

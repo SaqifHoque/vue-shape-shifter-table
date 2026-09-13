@@ -24,6 +24,10 @@ export interface TableMenuItem { text: string; event: string }
 export interface TableFooter { field?: unknown; [metadata: string]: unknown }
 
 export interface ShapeShifterTableProps {
+  sortable?: boolean
+  filterable?: boolean
+  sort?: TableSort | null
+  filter?: string
   headers?: TableHeader[]
   tableData?: TableRow[]
   footers?: TableFooter[]
@@ -62,10 +66,13 @@ export interface CellUpdate {
 export interface ColumnChange { header: TableHeader; columnIndex: number }
 export interface RowChange { row: TableRow; rowIndex: number }
 export interface ColumnMove { from: number; to: number }
+export interface TableSort { key: TableKey; direction: 'asc' | 'desc' }
 export interface ContextEvent { event: string; menu_id: TableKey | undefined; type: 'row' | 'column' }
 
 /** Public event names and the payload associated with each event. */
 export interface TableEventPayloads {
+  'update:sort': TableSort | null
+  'update:filter': string
   'update:headers': TableHeader[]
   'update:tableData': TableRow[]
   'update:page': number

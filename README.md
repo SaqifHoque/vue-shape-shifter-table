@@ -1,5 +1,28 @@
 # Vue Shapeshifter Table
 
+## Sorting and search
+
+Enable `sortable` for a separate sort button on each heading and `filterable` for global search. Both are off by default. They work with pagination and column dragging without adding dependencies:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  v-model:sort="sort"
+  v-model:filter="filter"
+  sortable filterable pagination
+  :page-size="10"
+/>
+```
+
+Initialize `sort` as `ref<TableSort | null>(null)` (import `TableSort` from the package) and `filter` as `ref('')`. In JavaScript, use `ref(null)` for sort. Bindings are optional; internal state also works. `sort` has the shape `{ key: 'name', direction: 'asc' }`, using a stable header key. Clicking the sort button cycles ascending → descending → original order; it emits `update:sort`. Search emits `update:filter` with the entered text.
+
+Search uses a trimmed, case-insensitive substring across columns defined by the headers. It matches string, number, boolean, and bigint cell fields; missing cells and objects are treated as empty. Sorting is stable, compares finite numbers numerically, and otherwise uses English natural text order (so `Item 2` precedes `Item 10`). Empty and unsupported values stay last in either direction. No custom comparator or per-column filters are provided in this release.
+
+The view applies **filter → sort → paginate**. Sorting and filtering never reorder or trim the parent row array. Slot indices and edit/delete payloads keep their absolute source indices. Changing criteria returns to page 1; pagination totals show matching rows, while the main footer still reports the full dataset. Sort selection follows the header key during dragging and clears when that column is removed. Disable either feature to ignore its stored criteria.
+
+Draft edits do not affect sorting or filtering until committed. After saving, a row can move or stop matching the search. Searching, sorting, or navigating cancels any editor still open; ordinary blur saves as before. All rows remain in memory: this is client-side sorting and filtering.
+
 ## TypeScript
 
 The package includes declarations for the named component, default plugin, props, events, and slots. No separate `@types` package is needed. Use Vue 3.3+ and TypeScript 5+ with `moduleResolution: "Bundler"` or `"NodeNext"`.
@@ -235,7 +258,7 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 ### Current limits
 
 The component renders all rows unless pagination is enabled. It does not provide virtualization,
-sorting, filtering, validation, or persistent storage. `addable` and `removable`
+server-side queries, validation, or persistent storage. `addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.
 

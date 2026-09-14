@@ -1,5 +1,40 @@
 # Vue Shapeshifter Table
 
+## Saved column order (1.1.0)
+
+Use `applyColumnOrder` after loading table data to restore a user's preferred order. It returns new `headers` and `rows` arrays with matching column positions; it does not read browser storage or modify your inputs.
+
+```js
+import { applyColumnOrder } from 'vue-shapeshifter-table'
+
+// Save only keys after the user chooses to save their preferences.
+function saveOrder() {
+  try {
+    localStorage.setItem('my-table:column-order:v1', JSON.stringify(headers.value.map(h => h.key)))
+  } catch {
+    // Storage can be unavailable or full. Keep the table usable.
+  }
+}
+
+// In onMounted (or after fetching data), so SSR does not access localStorage.
+function restoreOrder() {
+  try {
+    const order = JSON.parse(localStorage.getItem('my-table:column-order:v1') ?? 'null')
+    const restored = applyColumnOrder(headers.value, rows.value, order)
+    headers.value = restored.headers
+    rows.value = restored.rows
+  } catch {
+    // Malformed saved JSON or an invalid schema: retain the current table.
+  }
+}
+```
+
+Headers must have unique string or finite numeric keys. Saved keys for removed columns and duplicate/invalid saved entries are ignored. New columns are appended in their current schema order. Non-array preferences leave the order unchanged. Numeric `0` and string `'0'` are distinct keys. Short rows keep empty positions, and extra cells beyond the schema are retained. Header/cell objects are shallow copies; nested custom metadata remains shared.
+
+Restore only after loading the matching row data. Persist keys rather than row contents; the library makes no storage or network calls. Reset by restoring your default key list and removing your own storage key. Column widths are not currently supported. The demo's explicit save/reset controls illustrate this flow.
+
+Version 1.1.0 also includes pagination, drag-and-drop, sorting/search, and TypeScript declarations. See [CHANGELOG.md](./CHANGELOG.md) for the release contents. Publishing to npm is a separate authenticated step; a version in this repository does not confirm registry availability.
+
 ## Sorting and search
 
 Enable `sortable` for a separate sort button on each heading and `filterable` for global search. Both are off by default. They work with pagination and column dragging without adding dependencies:

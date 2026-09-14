@@ -13,6 +13,7 @@
       sortable
       filterable
       pagination
+      draggable-columns
       :page-size="2"
       :page-size-options="[2, 10, 25]"
       title="Product launch board"
@@ -30,6 +31,11 @@
         <span class="status" role="status"><i aria-hidden="true" /> {{ lastChange }}</span>
       </template>
     </ShapeShifterTable>
+    <div class="preferences">
+      <button type="button" @click="saveColumnOrder">Save column order</button>
+      <button type="button" @click="resetColumnOrder">Reset column order</button>
+      <p>Only column order is saved in this browser. Table values reset on refresh.</p>
+    </div>
     <section class="features">
       <article><span>01</span><h2>Shape freely</h2><p>Add, remove, edit, or rearrange columns and rows in place.</p></article>
       <article><span>02</span><h2>Vue 3 native</h2><p>Keep your data in sync as you edit, with room for your own controls.</p></article>
@@ -39,8 +45,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { ShapeShifterTable } from 'vue-shapeshifter-table'
+import { onMounted, ref } from 'vue'
+import { ShapeShifterTable, applyColumnOrder } from 'vue-shapeshifter-table'
 import 'vue-shapeshifter-table/style.css'
 
 const headers = ref([
@@ -53,9 +59,47 @@ const rows = ref([
   [{ field: 'Pulse', key: 'pulse-project', editable: true }, { field: 'Amara Wells', key: 'pulse-owner', editable: true }, { field: 'Exploring', key: 'pulse-status', editable: true }, { field: 'Oct 21', key: 'pulse-launch', editable: true }],
 ])
 const lastChange = ref('Ready to explore')
+const storageKey = 'vue-shapeshifter-demo:column-order:v1'
+const defaultOrder = headers.value.map((header) => header.key)
+function restoreColumnOrder(order) {
+  const restored = applyColumnOrder(headers.value, rows.value, order)
+  headers.value = restored.headers
+  rows.value = restored.rows
+}
+onMounted(() => {
+  try {
+    const stored = localStorage.getItem(storageKey)
+    if (stored !== null) {
+      restoreColumnOrder(JSON.parse(stored))
+      lastChange.value = 'Saved column order restored'
+    }
+  } catch {
+    lastChange.value = 'Saved preferences unavailable; using default order'
+  }
+})
+function saveColumnOrder() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(headers.value.map((header) => header.key)))
+    lastChange.value = 'Column order saved in this browser'
+  } catch {
+    lastChange.value = 'Browser storage unavailable; column order was not saved'
+  }
+}
+function resetColumnOrder() {
+  restoreColumnOrder(defaultOrder)
+  try {
+    localStorage.removeItem(storageKey)
+    lastChange.value = 'Column order reset'
+  } catch {
+    lastChange.value = 'Order reset for this session; saved preferences could not be removed'
+  }
+}
 </script>
 
 <style>
+.preferences { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.preferences button { padding: .65rem; border: 1px solid #ddd6fe; border-radius: .5rem; background: white; color: #5b21b6; cursor: pointer; }
+.preferences p { font-size: .85rem; color: #667085; }
 :root { color: #182033; background: #f6f4fb; font-family: Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-synthesis: none; } body { min-width: 320px; min-height: 100vh; margin: 0; } button,input { font: inherit; }
 .demo { position: relative; isolation: isolate; width: min(1120px,calc(100% - 2rem)); margin: auto; padding: 5rem 0 4rem; }
 .demo__glow { position: fixed; z-index: -1; width: min(28rem, 80vw); height: min(28rem, 80vw); border-radius: 50%; filter: blur(90px); opacity: .25; } .demo__glow--one { top: -12rem; left: -8rem; background: #a78bfa; } .demo__glow--two { right: -10rem; bottom: -14rem; background: #38bdf8; }

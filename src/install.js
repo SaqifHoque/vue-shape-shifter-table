@@ -7,4 +7,5 @@ const ShapeShifterTablePlugin = {
 }
 
 export { ShapeShifterTable }
+export { applyColumnOrder } from './columnOrder.js'
 export default ShapeShifterTablePlugin

@@ -20,6 +20,12 @@ export interface TableHeader extends TableCell {
 
 /** Short rows and missing cells are supported. Slot consumers must handle undefined cells. */
 export type TableRow = Array<TableCell | undefined>
+/** Unknown/duplicate saved keys are ignored; new columns are appended in schema order. */
+export declare function applyColumnOrder(
+  headers: readonly TableHeader[],
+  rows: ReadonlyArray<readonly (TableCell | undefined)[]>,
+  order: unknown,
+): { headers: TableHeader[]; rows: TableRow[] }
 export interface TableMenuItem { text: string; event: string }
 export interface TableFooter { field?: unknown; [metadata: string]: unknown }
 

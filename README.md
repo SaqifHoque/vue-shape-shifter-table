@@ -321,7 +321,38 @@ the consumed bundle.
 
 ## Publishing
 
-Before publishing a release:
+### Automatic publishing
+
+`.github/workflows/publish.yml` publishes new stable package versions automatically
+after changes reach `main`. It also supports **Actions → Publish npm package → Run
+workflow** on `main` to retry a failed release. Already-published versions are
+skipped; registry errors stop the release. Versions must increase and match the
+lockfile. Tests, the demo build, the security audit, and a package dry run must pass.
+
+One-time maintainer setup in npm: open this package's **Settings → Trusted
+publishing**, choose **GitHub Actions**, and enter:
+
+- Organization or user: `SaqifHoque`
+- Repository: `vue-shape-shifter-table`
+- Workflow filename: `publish.yml` (not the full path)
+- Environment: leave blank (the workflow does not use a GitHub environment)
+- Allowed actions: enable direct publishing with `npm publish`
+
+This uses short-lived OIDC credentials, not an `NPM_TOKEN` secret, and publishes
+provenance. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+Protect `main` with required reviews and checks, especially for workflow changes.
+The workflow must be merged into `main` and the npm trust configured before it
+can publish. Merging a version bump authorizes a public release, so review the
+package contents and changelog first. The npm package page's README updates with
+publication; README-only changes require a new package version to appear there.
+
+For each release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`
+in a PR. After merging, check the Actions result and verify the registry with
+`npm view vue-shapeshifter-table version`.
+
+### Manual fallback
+
+Before publishing manually:
 
 1. Update the version and release notes.
 2. Run `npm test`, `npm run build:demo`, and `npm run security:audit`.

@@ -1,0 +1,73 @@
+name: Publish npm package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'SaqifHoque/vue-shape-shifter-table' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Check whether this version needs publishing
+        id: version
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          if (pkg.name !== 'vue-shapeshifter-table' || !/^\d+\.\d+\.\d+$/.test(pkg.version)) {
+            throw new Error('Expected the stable vue-shapeshifter-table package');
+          }
+          if (lock.version !== pkg.version || lock.packages[''].version !== pkg.version) {
+            throw new Error('Package and lockfile versions must match');
+          }
+          const response = await fetch(`https://registry.npmjs.org/${pkg.name}`, {
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!response.ok) throw new Error(`Registry check failed: ${response.status}`);
+          const metadata = await response.json();
+          if (!metadata.versions || !metadata['dist-tags']?.latest) throw new Error('Invalid registry metadata');
+          const exists = Object.hasOwn(metadata.versions, pkg.version);
+          if (!exists) {
+            const current = metadata['dist-tags'].latest.split('.').map(Number);
+            const next = pkg.version.split('.').map(Number);
+            const difference = next.map((part, i) => part - current[i]).find(value => value !== 0);
+            if (!current.every(Number.isInteger) || !(difference > 0)) throw new Error('Version must increase latest');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!exists}\n`);
+          console.log(`${pkg.name}@${pkg.version}: ${exists ? 'already published; skipping' : 'ready for verification'}`);
+          NODE
+      - run: npm ci
+        if: steps.version.outputs.publish == 'true'
+      - run: npm test
+        if: steps.version.outputs.publish == 'true'
+      - run: npm run build:demo
+        if: steps.version.outputs.publish == 'true'
+      - run: npm run security:audit
+        if: steps.version.outputs.publish == 'true'
+      - run: npm pack --dry-run
+        if: steps.version.outputs.publish == 'true'
+      - name: Publish using npm trusted publishing
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish --access public --provenance

@@ -1,5 +1,5 @@
 import { createApp, h } from 'vue'
-import plugin, { ShapeShifterTable } from 'vue-shapeshifter-table'
+import plugin, { ShapeShifterTable, applyColumnOrder } from 'vue-shapeshifter-table'
 import type {
   TableHeader, TableRow, TableSlots, ShapeShifterTableProps,
   TableEventPayloads, CellUpdate, ColumnMove,
@@ -8,6 +8,8 @@ import 'vue-shapeshifter-table/style.css'
 
 const headers: TableHeader[] = [{ key: 'name', field: 'Name', editable: true }]
 const rows: TableRow[] = [[{ field: 'Ada', key: 1, customMetadata: { active: true } }], []]
+const restored: { headers: TableHeader[]; rows: TableRow[] } = applyColumnOrder(headers, rows, ['name'])
+void restored
 createApp({ render: () => h(ShapeShifterTable, { headers, tableData: rows, pagination: true, page: 2 }) }).use(plugin)
 
 const slots: TableSlots = {

@@ -230,6 +230,54 @@ test('server-side mode emits queries and renders the supplied remote page unchan
   table.unmount()
 })
 
+test('column resizing supports pointer and keyboard controls with minimum widths', async () => {
+  const changes = []
+  const table = mount({ props: { resizableColumns: true, minimumColumnWidth: 120, onColumnResize: (value) => changes.push(value) } })
+  const handle = table.find((node) => node.props['aria-label'] === 'Resize Name column')
+  const event = {
+    pointerId: 4, button: 0, isPrimary: true, clientX: 100,
+    currentTarget: { setPointerCapture() {}, closest: () => ({ getBoundingClientRect: () => ({ width: 180 }) }) },
+  }
+  handle.props.onPointerdown(event)
+  handle.props.onPointermove({ ...event, clientX: 40 })
+  handle.props.onPointerup({ ...event, clientX: 40 })
+  await nextTick()
+  assert.equal(table.headers.value[0].width, 120)
+  assert.deepEqual(changes[0], { key: 'name', width: 120, columnIndex: 0 })
+  for (const handler of handle.props.onKeydown) handler({ key: 'ArrowRight', preventDefault() {} })
+  await nextTick()
+  assert.equal(table.headers.value[0].width, 130)
+  table.unmount()
+})
+
+test('persistence restores column order, widths and controls without storing rows by default', async () => {
+  const values = new Map([['table-state', JSON.stringify({
+    columns: [{ key: 'role', width: 240 }, { key: 'name', width: 110 }],
+    sort: { key: 'name', direction: 'desc' }, filter: 'may', columnFilters: [], page: 2, pageSize: 25,
+    rows: [[{ field: 'Should not restore' }]],
+  })]])
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  }
+  const table = mount({ props: {
+    persistenceKey: 'table-state', persistenceStorage: storage, resizableColumns: true,
+    sortable: true, filterable: true,
+  } })
+  await nextTick()
+  await nextTick()
+  assert.deepEqual(table.headers.value.map((header) => [header.key, header.width]), [['role', 240], ['name', 110]])
+  assert.deepEqual(table.rows.value[0].map((cell) => cell.field), ['Designer', 'Maya'])
+  assert.deepEqual(visibleNames(table), ['Designer', 'Maya'])
+  await search(table, 'designer')
+  await nextTick()
+  const saved = JSON.parse(values.get('table-state'))
+  assert.equal(saved.filter, 'designer')
+  assert.equal('rows' in saved, false)
+  table.unmount()
+})
+
 test('pointer dragging moves non-adjacent columns across all pages', async () => {
   const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })),
     rows: [[{ field: 'a' }, { field: 'b' }, { field: 'c' }], [{ field: 'd' }]],

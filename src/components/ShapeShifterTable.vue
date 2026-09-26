@@ -24,7 +24,7 @@
       <table ref="tableElement" class="sst__table">
         <thead :class="{ 'sst__head--sticky': stickyHeader }">
           <tr>
-            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :aria-sort="sortable ? sortDirection(header.key) : undefined" :data-column-index="columnIndex" :class="[header.fixed, { 'sst__drop-target': dropIndex === columnIndex }]">
+            <th v-for="(header, columnIndex) in localHeaders" :key="header.key" scope="col" :aria-sort="sortable ? sortDirection(header.key) : undefined" :data-column-index="columnIndex" :class="[header.fixed, { 'sst__drop-target': dropIndex === columnIndex }]" :style="columnStyle(header)">
               <div class="sst__cell-layout">
                 <button v-if="sortable" class="sst__sort-button" type="button" :aria-label="`Sort ${header.field}`" @click="toggleSort(header.key)">{{ sortDirection(header.key) === 'ascending' ? '↑' : sortDirection(header.key) === 'descending' ? '↓' : '↕' }}</button>
                 <button v-if="draggableColumns && localHeaders.length > 1" type="button" class="sst__drag-handle"
@@ -65,6 +65,11 @@
                     <button v-if="removable" class="sst__danger" type="button" @click="removeColumn(columnIndex)">Delete column</button>
                   </div>
                 </details>
+                <span v-if="resizableColumns" class="sst__resize-handle" role="separator" tabindex="0" aria-orientation="vertical"
+                  :aria-label="`Resize ${header.field} column`" :aria-valuenow="columnWidth(header)"
+                  @pointerdown="beginResize($event, columnIndex)" @pointermove="trackResize" @pointerup="finishResize"
+                  @pointercancel="cancelResize" @lostpointercapture="cancelResize"
+                  @keydown.left.prevent="resizeBy(columnIndex, -10)" @keydown.right.prevent="resizeBy(columnIndex, 10)" />
               </div>
             </th>
             <th v-if="removable && localRows.length" class="sst__action-column" scope="col"><span class="sst__sr-only">Row actions</span></th>
@@ -145,7 +150,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
+import { applyColumnOrder } from '../columnOrder.js'
 
 defineOptions({ name: 'ShapeShifterTable' })
 
@@ -180,6 +186,11 @@ const props = defineProps({
   totalRows: { type: Number, default: null },
   rowOffset: { type: Number, default: null },
   loading: { type: Boolean, default: false },
+  resizableColumns: { type: Boolean, default: false },
+  minimumColumnWidth: { type: Number, default: 96 },
+  persistenceKey: { type: String, default: '' },
+  persistenceStorage: { type: Object, default: null },
+  persistTableData: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -189,6 +200,7 @@ const emit = defineEmits([
   'update:sort', 'update:filter',
   'update:columnFilters', 'validation-error',
   'query-change',
+  'column-resize', 'persistence-error',
 ])
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -210,6 +222,7 @@ const tableElement = shallowRef(null)
 const dropIndex = ref(null)
 const moveAnnouncement = ref('')
 let drag = null
+let resize = null
 function cancelDrag() {
   drag = null
   dropIndex.value = null
@@ -238,6 +251,43 @@ function finishDrag(event) {
 }
 watch(() => props.draggableColumns, cancelDrag)
 watch(() => props.headers, cancelDrag, { deep: true })
+
+const minimumWidth = computed(() => Number.isFinite(props.minimumColumnWidth) && props.minimumColumnWidth > 0 ? props.minimumColumnWidth : 96)
+const columnWidth = (header) => Number.isFinite(header.width) ? Math.max(minimumWidth.value, Math.round(header.width)) : 160
+const columnStyle = (header) => Number.isFinite(header.width)
+  ? { width: `${columnWidth(header)}px`, minWidth: `${columnWidth(header)}px`, maxWidth: `${columnWidth(header)}px` } : undefined
+function cancelResize() {
+  if (resize) localHeaders.value[resize.index].width = resize.original
+  resize = null
+}
+function beginResize(event, index) {
+  if (!props.resizableColumns || event.button !== 0 || event.isPrimary === false) return
+  cancelEditing()
+  const header = localHeaders.value[index]
+  const measured = event.currentTarget.closest?.('th')?.getBoundingClientRect?.().width
+  resize = { index, pointerId: event.pointerId, x: event.clientX, width: Number.isFinite(measured) ? measured : columnWidth(header), original: header.width }
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+function trackResize(event) {
+  if (!resize || event.pointerId !== resize.pointerId) return
+  localHeaders.value[resize.index].width = Math.max(minimumWidth.value, Math.round(resize.width + event.clientX - resize.x))
+}
+function finishResize(event) {
+  if (!resize || event.pointerId !== resize.pointerId) return
+  trackResize(event)
+  const index = resize.index
+  const header = localHeaders.value[index]
+  resize = null
+  publish()
+  emit('column-resize', { key: header.key, width: columnWidth(header), columnIndex: index })
+}
+function resizeBy(index, amount) {
+  const header = localHeaders.value[index]
+  header.width = Math.max(minimumWidth.value, columnWidth(header) + amount)
+  publish()
+  emit('column-resize', { key: header.key, width: header.width, columnIndex: index })
+}
+watch(() => props.resizableColumns, cancelResize)
 
 const positiveInteger = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback
 const localPage = ref(positiveInteger(props.page, 1))
@@ -395,6 +445,61 @@ watch(() => props.pagination, () => cancelEditing())
 watch(() => props.headers, (headers) => { cancelEditing(); localHeaders.value = cloneHeaders(headers) }, { deep: true })
 watch(() => props.tableData, (rows) => { cancelEditing(); localRows.value = cloneRows(rows) }, { deep: true })
 
+const persistenceReady = ref(false)
+const activeStorage = () => props.persistenceStorage ?? (typeof window !== 'undefined' ? window.localStorage : null)
+function reportPersistenceError(operation, error) { emit('persistence-error', { operation, error }) }
+function restorePersistence() {
+  if (!props.persistenceKey) return
+  try {
+    const raw = activeStorage()?.getItem(props.persistenceKey)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (!isObject(saved)) return
+    const definitions = Array.isArray(saved.columns) ? saved.columns : []
+    const restored = applyColumnOrder(localHeaders.value, localRows.value, definitions.map((item) => item?.key))
+    const widths = new Map(definitions.filter(isObject).map((item) => [item.key, item.width]))
+    localHeaders.value = restored.headers.map((header) => ({
+      ...header,
+      ...(Number.isFinite(widths.get(header.key)) ? { width: Math.max(minimumWidth.value, widths.get(header.key)) } : {}),
+    }))
+    localRows.value = props.persistTableData && Array.isArray(saved.rows) ? cloneRows(saved.rows) : restored.rows
+    localSort.value = normalizeSort(saved.sort)
+    localFilter.value = typeof saved.filter === 'string' ? saved.filter : ''
+    localColumnFilters.value = normalizeColumnFilters(saved.columnFilters)
+    localPage.value = positiveInteger(saved.page, localPage.value)
+    localPageSize.value = positiveInteger(saved.pageSize, localPageSize.value)
+    publish()
+  } catch (error) { reportPersistenceError('restore', error) }
+}
+function savePersistence() {
+  if (!persistenceReady.value || !props.persistenceKey) return
+  try {
+    const storage = activeStorage()
+    if (!storage) return
+    const state = {
+      columns: localHeaders.value.map(({ key, width }) => ({ key, ...(Number.isFinite(width) ? { width } : {}) })),
+      sort: localSort.value ? { ...localSort.value } : null,
+      filter: localFilter.value,
+      columnFilters: localColumnFilters.value.map((entry) => ({ ...entry })),
+      page: localPage.value,
+      pageSize: localPageSize.value,
+      ...(props.persistTableData ? { rows: cloneRows(localRows.value) } : {}),
+    }
+    storage.setItem(props.persistenceKey, JSON.stringify(state))
+  } catch (error) { reportPersistenceError('save', error) }
+}
+function clearPersistence() {
+  if (!props.persistenceKey) return
+  try { activeStorage()?.removeItem(props.persistenceKey) }
+  catch (error) { reportPersistenceError('clear', error) }
+}
+onMounted(() => {
+  restorePersistence()
+  persistenceReady.value = true
+})
+watch([localHeaders, localRows, localSort, localFilter, localColumnFilters, localPage, localPageSize], savePersistence, { deep: true })
+defineExpose({ clearPersistence })
+
 const showColumnActions = computed(() => props.removable || props.contextMenuColumn.length > 0 || localHeaders.value.length > 1)
 const cellAt = (row, columnIndex) => row[columnIndex]
 const cellId = (rowIndex, columnIndex) => `cell-${rowIndex}-${columnIndex}`
@@ -531,6 +636,8 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 .sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }
 .sst__drag-handle:active { cursor: grabbing; }
 .sst__drag-handle:focus-visible { outline: 2px solid var(--sst-accent); }
+.sst__resize-handle { position: absolute; top: 0; right: -.25rem; z-index: 5; width: .5rem; height: 100%; cursor: col-resize; touch-action: none; }
+.sst__resize-handle:focus-visible { outline: 2px solid var(--sst-accent); outline-offset: -.2rem; }
 .sst thead th.sst__drop-target { box-shadow: inset 0 0 0 2px var(--sst-accent); }
 .sst__pagination { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; padding: 1rem; border-top: 1px solid var(--sst-line); font-size: .85rem; }
 .sst__pagination label { display: flex; align-items: center; gap: .5rem; }
@@ -545,7 +652,7 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 .sst__table { width: 100%; min-width: 42rem; border-spacing: 0; border-collapse: separate; table-layout: auto; }
 .sst th, .sst td { min-width: 10rem; padding: .9rem 1rem; text-align: left; border-right: 1px solid var(--sst-line); border-bottom: 1px solid var(--sst-line); }
 .sst th:last-child, .sst td:last-child { border-right: 0; } .sst tbody tr:last-child td { border-bottom: 0; }
-.sst thead th { color: #4c1d95; background: #f7f4ff; font-size: .78rem; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
+.sst thead th { position: relative; color: #4c1d95; background: #f7f4ff; font-size: .78rem; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
 .sst__head--sticky th { position: sticky; top: 0; z-index: 4; }
 .sst tbody tr { transition: background-color .18s ease; } .sst tbody tr:hover { background: #fafaff; }
 .sst__cell-layout { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: .6rem; }

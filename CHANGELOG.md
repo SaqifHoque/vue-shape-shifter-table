@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add custom sort comparators, per-column filters, and accessible edit validation.
+
 ## 1.1.0
 
 - Optional pagination with page-size controls and absolute row indices.

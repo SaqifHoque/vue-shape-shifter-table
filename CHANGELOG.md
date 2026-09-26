@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
-- Add custom sort comparators, per-column filters, and accessible edit validation.
-- Add server-side query mode with remote totals, loading state, and absolute row offsets.
-- Add resizable columns and opt-in automatic table preference/data persistence.
+- Add custom sort comparators and per-column filters.
+- Add accessible validation for cell and heading edits.
+- Add server-driven query mode with remote totals, loading state, and absolute row offsets.
+- Add pointer/keyboard column resizing and persisted widths.
+- Add opt-in automatic persistence for table preferences and optional row values.
 - Add fixed-height row virtualization and edge auto-scroll while dragging columns.
+- Simplify the npm description and organize the README into feature examples with local demo screenshots.
 
 ## 1.1.0
 

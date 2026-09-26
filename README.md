@@ -102,7 +102,7 @@ Enable `draggable-columns` on `ShapeShifterTable` to display drag handles. Drag 
 
 Focus a handle and press Left or Right to move using the keyboard. Escape, pointer cancellation, or dropping outside this table cancels a drag. The existing Move left/right menu actions remain available. Reordering emits `update:headers`, `update:tableData`, and `move-column` with zero-based `{ from, to }` indices. Bind both data models to retain changes.
 
-Dragging is off by default and adds no dependencies. This implementation does not auto-scroll the table during a drag; use the move buttons or scroll before dragging to a distant column.
+Dragging is off by default and adds no dependencies. Holding a dragged handle near a horizontal or vertical table edge auto-scrolls the frame so distant columns remain reachable.
 
 ### Resizable columns
 
@@ -136,7 +136,25 @@ Initialize `page` with `ref(1)` and `pageSize` with `ref(10)`. These bindings ar
 
 Changing the page size returns to page 1. Deleting rows or replacing the dataset clamps the page to the last available page. Empty tables show page 1 of 1 with navigation disabled. Added rows are appended to the dataset without moving the current page. Cell events and slot `rowIndex` values always refer to the full dataset, not the visible page. Navigation cancels any draft still open; ordinary input blur saves edits as before.
 
-This is client-side pagination, not server-side fetching or virtualization: all supplied rows remain in memory. No additional runtime dependencies are required.
+This is client-side pagination: all supplied rows remain in memory. Use server-side mode for API-backed pages or virtualization to limit rendered rows. No additional runtime dependencies are required.
+
+### Row virtualization
+
+Enable `virtualized` for large local datasets. Only the rows in the visible window plus `overscan` rows are mounted, while spacer rows preserve the full scroll range.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  virtualized
+  :row-height="48"
+  :virtual-viewport-height="480"
+  :overscan="3"
+  max-height="480px"
+/>
+```
+
+Set `row-height` to the rendered height of a body row and keep row content at that fixed height. `virtual-viewport-height` controls the calculated window and should match the table frame's visible height; `overscan` renders extra rows above and below for smooth scrolling. Sorting, filters, editing, deletion, slots, pagination, and server-provided pages retain their source indices. Virtualization reduces DOM work but keeps the supplied local rows in memory.
 
 ### Server-side data
 
@@ -372,12 +390,9 @@ The root exposes `--sst-accent`, `--sst-accent-strong`, `--sst-ink`,
 `--sst-muted`, and `--sst-line` CSS variables. Some decorative colors are fixed.
 Always import `vue-shapeshifter-table/style.css` in the consuming application.
 
-### Current limits
+### Behavior notes
 
-The component renders all rows unless pagination is enabled. It does not provide virtualization.
-`addable` and `removable`
-control UI visibility; they are not authorization rules. Column movement remains
-available when more than one column exists, even with both set to `false`.
+`addable` and `removable` control UI visibility; they are not authorization rules. Column movement remains available when more than one column exists, even with both set to `false`. Virtual rows require a fixed configured height. Server-side mode emits query state but leaves networking, caching, cancellation, and error handling to the application.
 
 ## Development
 

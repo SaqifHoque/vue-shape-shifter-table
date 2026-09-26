@@ -201,6 +201,8 @@ test('invalid edits stay open and emit an accessible validation error', async ()
 test('server-side mode emits queries and renders the supplied remote page unchanged', async () => {
   const queries = []
   const edits = []
+  const validations = []
+  const additions = []
   const table = mount({
     rows: [[{ field: 'Remote 3', key: 'remote-3' }, { field: 'Zulu' }], [{ field: 'Remote 4' }, { field: 'Alpha' }]],
     props: {
@@ -208,6 +210,8 @@ test('server-side mode emits queries and renders the supplied remote page unchan
       sortable: true, filterable: true, rowOffset: 2,
       onQueryChange: (value) => queries.push(value),
       onCellUpdate: (value) => edits.push(value),
+      onAddRow: (value) => additions.push(value),
+      validator: (value, context) => { validations.push(context); return true },
     },
   })
   await nextTick()
@@ -226,7 +230,10 @@ test('server-side mode emits queries and renders the supplied remote page unchan
   input.props.onBlur()
   await nextTick()
   assert.equal(edits[0].rowIndex, 2)
+  assert.equal(validations[0].rowIndex, 2)
   assert.equal(table.find((node) => node.props['aria-label'] === 'Delete row 3').type, 'button')
+  await table.click('＋ Row')
+  assert.equal(additions[0].rowIndex, 4)
   table.unmount()
 })
 
@@ -275,6 +282,51 @@ test('persistence restores column order, widths and controls without storing row
   const saved = JSON.parse(values.get('table-state'))
   assert.equal(saved.filter, 'designer')
   assert.equal('rows' in saved, false)
+  table.unmount()
+})
+
+test('virtualization renders a moving window while preserving source row indices', async () => {
+  const rows = Array.from({ length: 100 }, (_, index) => [
+    { field: `Person ${index + 1}`, key: `person-${index}` }, { field: `Role ${index + 1}` },
+  ])
+  const table = mount({ rows, props: { virtualized: true, rowHeight: 20, virtualViewportHeight: 60, overscan: 1 } })
+  assert.deepEqual(visibleNames(table), ['Person 1', 'Role 1', 'Person 2', 'Role 2', 'Person 3', 'Role 3', 'Person 4', 'Role 4'])
+  const frame = table.find((node) => node.props.class === 'sst__frame')
+  frame.props.onScroll({ currentTarget: { scrollTop: 200 } })
+  await nextTick()
+  assert.deepEqual(visibleNames(table).slice(0, 2), ['Person 10', 'Role 10'])
+  assert.equal(visibleNames(table).length, 10)
+  await table.click('Person 10')
+  const input = table.find((node) => node.type === 'input')
+  input.props.onInput({ target: { value: 'Edited virtual row' } })
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(table.rows.value[9][0].field, 'Edited virtual row')
+  assert.equal(table.events[0][1].rowIndex, 9)
+  assert.deepEqual(visibleNames(table).slice(0, 2), ['Edited virtual row', 'Role 10'])
+  table.unmount()
+})
+
+test('column dragging auto-scrolls the frame near an edge', async () => {
+  const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })), props: { draggableColumns: true } })
+  const grid = table.find((node) => node.type === 'table')
+  const frame = table.find((node) => node.props.class === 'sst__frame')
+  const scrolls = []
+  frame.getBoundingClientRect = () => ({ left: 0, right: 500, top: 0, bottom: 300 })
+  frame.scrollBy = (value) => scrolls.push(value)
+  grid.ownerDocument = {
+    elementFromPoint: () => ({ closest: () => ({ dataset: { columnIndex: '2' }, closest: () => grid }) }),
+    defaultView: { requestAnimationFrame: () => 1, cancelAnimationFrame() {} },
+  }
+  const handle = table.find((node) => node.props['aria-label'] === 'Move A column')
+  const event = { pointerId: 8, button: 0, isPrimary: true, clientX: 250, clientY: 150, currentTarget: { setPointerCapture() {} } }
+  handle.props.onPointerdown(event)
+  handle.props.onPointermove({ ...event, clientX: 498 })
+  assert.equal(scrolls.length, 1)
+  assert.ok(scrolls[0].left > 0)
+  handle.props.onPointerup({ ...event, clientX: 498 })
+  await nextTick()
+  assert.deepEqual(table.headers.value.map((header) => header.key), ['B', 'C', 'A'])
   table.unmount()
 })
 

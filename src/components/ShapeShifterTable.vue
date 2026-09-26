@@ -11,7 +11,7 @@
     <div v-if="filterable" class="sst__search">
       <label>Search table <input type="search" :value="localFilter" @input="changeFilter($event.target.value)" /></label>
       <button v-if="localFilter" class="sst__button sst__button--secondary" type="button" @click="changeFilter('')">Clear search</button>
-      <span role="status">{{ resultCount }} of {{ localRows.length }} rows match</span>
+      <span role="status">{{ serverSide ? `${localRows.length} of ${resultCount} rows loaded` : `${resultCount} of ${localRows.length} rows match` }}</span>
     </div>
     <div v-if="columnFilterable" class="sst__column-filters" aria-label="Column filters">
       <label v-for="header in localHeaders" :key="header.key">
@@ -20,7 +20,7 @@
       </label>
       <button v-if="localColumnFilters.length" class="sst__button sst__button--secondary" type="button" @click="clearColumnFilters">Clear filters</button>
     </div>
-    <div class="sst__frame" :style="{ maxHeight }">
+    <div ref="frameElement" class="sst__frame" :style="{ maxHeight }" @scroll="handleFrameScroll">
       <table ref="tableElement" class="sst__table">
         <thead :class="{ 'sst__head--sticky': stickyHeader }">
           <tr>
@@ -77,6 +77,7 @@
         </thead>
 
         <tbody>
+          <tr v-if="virtualBeforeHeight" class="sst__virtual-spacer" aria-hidden="true"><td :colspan="tableColumnCount" :style="{ height: `${virtualBeforeHeight}px` }" /></tr>
           <tr v-if="!resultCount">
             <td class="sst__empty" :colspan="Math.max(localHeaders.length + (removable ? 1 : 0), 1)">
               <slot name="empty">
@@ -118,6 +119,7 @@
             </td>
             <td v-if="removable" class="sst__row-action"><button type="button" :aria-label="`Delete row ${publicRowIndex(rowIndex) + 1}`" @click="removeRow(rowIndex)">×</button></td>
           </tr>
+          <tr v-if="virtualAfterHeight" class="sst__virtual-spacer" aria-hidden="true"><td :colspan="tableColumnCount" :style="{ height: `${virtualAfterHeight}px` }" /></tr>
         </tbody>
 
         <tfoot v-if="$slots.footer || footers.length">
@@ -191,6 +193,10 @@ const props = defineProps({
   persistenceKey: { type: String, default: '' },
   persistenceStorage: { type: Object, default: null },
   persistTableData: { type: Boolean, default: false },
+  virtualized: { type: Boolean, default: false },
+  rowHeight: { type: Number, default: 48 },
+  virtualViewportHeight: { type: Number, default: 480 },
+  overscan: { type: Number, default: 3 },
 })
 
 const emit = defineEmits([
@@ -219,27 +225,65 @@ const validationError = ref('')
 const editorRef = ref(null)
 let sequence = 0
 const tableElement = shallowRef(null)
+const frameElement = shallowRef(null)
+const frameScrollTop = ref(0)
 const dropIndex = ref(null)
 const moveAnnouncement = ref('')
 let drag = null
 let resize = null
+let autoScrollFrame = null
+let autoScrollView = null
+function stopAutoScroll() {
+  if (autoScrollFrame != null) autoScrollView?.cancelAnimationFrame?.(autoScrollFrame)
+  autoScrollFrame = null
+  autoScrollView = null
+}
 function cancelDrag() {
+  stopAutoScroll()
   drag = null
   dropIndex.value = null
 }
 function beginDrag(event, index) {
   if (!props.draggableColumns || event.button !== 0 || event.isPrimary === false) return
   cancelEditing()
-  drag = { index, pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+  drag = { index, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY }
   event.currentTarget.setPointerCapture(event.pointerId)
 }
 function trackDrag(event) {
   if (!drag || event.pointerId !== drag.pointerId) return
-  if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return
+  drag.x = event.clientX
+  drag.y = event.clientY
+  if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return
+  updateDropTarget()
+  autoScrollDrag()
+}
+function updateDropTarget() {
+  if (!drag) return
   const table = tableElement.value
-  const hit = table?.ownerDocument.elementFromPoint(event.clientX, event.clientY)
+  const hit = table?.ownerDocument.elementFromPoint(drag.x, drag.y)
   const heading = hit?.closest('th[data-column-index]')
   dropIndex.value = heading?.closest('table') === table ? Number(heading.dataset.columnIndex) : null
+}
+function autoScrollDrag() {
+  if (!drag) return
+  const frame = frameElement.value
+  const rect = frame?.getBoundingClientRect?.()
+  if (!rect) return
+  const edge = 48
+  const horizontal = drag.x < rect.left + edge ? -Math.ceil((rect.left + edge - drag.x) / 6)
+    : drag.x > rect.right - edge ? Math.ceil((drag.x - (rect.right - edge)) / 6) : 0
+  const vertical = drag.y < rect.top + edge ? -Math.ceil((rect.top + edge - drag.y) / 6)
+    : drag.y > rect.bottom - edge ? Math.ceil((drag.y - (rect.bottom - edge)) / 6) : 0
+  if (!horizontal && !vertical) { stopAutoScroll(); return }
+  frame.scrollBy?.({ left: horizontal, top: vertical, behavior: 'auto' })
+  updateDropTarget()
+  if (autoScrollFrame == null) {
+    autoScrollView = tableElement.value?.ownerDocument?.defaultView
+    autoScrollFrame = autoScrollView?.requestAnimationFrame?.(() => {
+      autoScrollFrame = null
+      autoScrollDrag()
+    }) ?? null
+  }
 }
 function finishDrag(event) {
   if (!drag || event.pointerId !== drag.pointerId) return
@@ -345,9 +389,28 @@ const pageSizes = computed(() => [...new Set([
   localPageSize.value,
   ...(Array.isArray(props.pageSizeOptions) ? props.pageSizeOptions : []).filter((size) => positiveInteger(size, 0)),
 ])].sort((a, b) => a - b))
-const visibleRows = computed(() => {
+const pagedRows = computed(() => {
   const start = pageStart.value
   return props.pagination && !props.serverSide ? processedRows.value.slice(start, start + localPageSize.value) : processedRows.value
+})
+const normalizedRowHeight = computed(() => Number.isFinite(props.rowHeight) && props.rowHeight > 0 ? props.rowHeight : 48)
+const normalizedViewportHeight = computed(() => Number.isFinite(props.virtualViewportHeight) && props.virtualViewportHeight > 0 ? props.virtualViewportHeight : 480)
+const normalizedOverscan = computed(() => Number.isSafeInteger(props.overscan) && props.overscan >= 0 ? props.overscan : 3)
+const virtualStart = computed(() => props.virtualized
+  ? Math.min(Math.max(0, pagedRows.value.length - 1), Math.max(0, Math.floor(frameScrollTop.value / normalizedRowHeight.value) - normalizedOverscan.value)) : 0)
+const virtualEnd = computed(() => props.virtualized
+  ? Math.min(pagedRows.value.length, Math.ceil((frameScrollTop.value + normalizedViewportHeight.value) / normalizedRowHeight.value) + normalizedOverscan.value)
+  : pagedRows.value.length)
+const visibleRows = computed(() => {
+  return pagedRows.value.slice(virtualStart.value, virtualEnd.value)
+})
+const virtualBeforeHeight = computed(() => props.virtualized ? virtualStart.value * normalizedRowHeight.value : 0)
+const virtualAfterHeight = computed(() => props.virtualized ? Math.max(0, (pagedRows.value.length - virtualEnd.value) * normalizedRowHeight.value) : 0)
+const tableColumnCount = computed(() => Math.max(localHeaders.value.length + (props.removable ? 1 : 0), 1))
+function handleFrameScroll(event) { frameScrollTop.value = event.currentTarget.scrollTop }
+watch([currentPage, () => props.virtualized], () => {
+  frameScrollTop.value = 0
+  if (frameElement.value) frameElement.value.scrollTop = 0
 })
 const pageEnd = computed(() => props.serverSide
   ? Math.min(pageStart.value + localRows.value.length, resultCount.value)
@@ -562,7 +625,7 @@ function finishCellEditing(rowIndex, columnIndex) {
   if (editingId.value !== cellId(rowIndex, columnIndex)) return
   const cell = localRows.value[rowIndex][columnIndex]
   const header = localHeaders.value[columnIndex]
-  if (!validateEdit(draftValue.value, { kind: 'cell', cell, header, row: localRows.value[rowIndex], rowIndex, columnIndex }, cell)) return
+  if (!validateEdit(draftValue.value, { kind: 'cell', cell, header, row: localRows.value[rowIndex], rowIndex: publicRowIndex(rowIndex), columnIndex }, cell)) return
   editingId.value = null
   editingTarget.value = null
   cell.field = draftValue.value
@@ -584,7 +647,7 @@ function addRow() {
   const row = localHeaders.value.map((header, columnIndex) => ({ field: '', key: nextKey(`cell-${rowIndex}-${columnIndex}`), columnKey: header.key, editable: true }))
   localRows.value.push(row)
   publish()
-  emit('add-row', { row, rowIndex })
+  emit('add-row', { row, rowIndex: publicRowIndex(rowIndex) })
 }
 function removeColumn(columnIndex) {
   cancelDrag()
@@ -631,6 +694,7 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 .sst__column-filters input { min-width: 0; padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; font: inherit; font-weight: 400; }
 .sst__validation-error { margin: 0; padding: .75rem 1rem; color: #9f1239; background: #fff1f2; border-top: 1px solid #fecdd3; font-size: .85rem; }
 .sst__loading { margin: 0; padding: .75rem 1rem; color: var(--sst-muted); background: #fafafa; border-top: 1px solid var(--sst-line); font-size: .85rem; }
+.sst__virtual-spacer td { padding: 0 !important; border: 0 !important; }
 .sst__sort-button { min-width: 2rem; min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; }
 .sst__sort-button:focus-visible { outline: 2px solid var(--sst-accent); }
 .sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }

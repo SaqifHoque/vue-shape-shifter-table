@@ -52,11 +52,28 @@ Enable `sortable` for a separate sort button on each heading and `filterable` fo
 
 Initialize `sort` as `ref<TableSort | null>(null)` (import `TableSort` from the package) and `filter` as `ref('')`. In JavaScript, use `ref(null)` for sort. Bindings are optional; internal state also works. `sort` has the shape `{ key: 'name', direction: 'asc' }`, using a stable header key. Clicking the sort button cycles ascending → descending → original order; it emits `update:sort`. Search emits `update:filter` with the entered text.
 
-Search uses a trimmed, case-insensitive substring across columns defined by the headers. It matches string, number, boolean, and bigint cell fields; missing cells and objects are treated as empty. Sorting is stable, compares finite numbers numerically, and otherwise uses English natural text order (so `Item 2` precedes `Item 10`). Empty and unsupported values stay last in either direction. No custom comparator or per-column filters are provided in this release.
+Search uses a trimmed, case-insensitive substring across columns defined by the headers. It matches string, number, boolean, and bigint cell fields; missing cells and objects are treated as empty. Sorting is stable, compares finite numbers numerically, and otherwise uses English natural text order (so `Item 2` precedes `Item 10`). Empty and unsupported values stay last in either direction.
+
+Use a global `comparator` prop or a header's `sortComparator` to define custom ordering. The header comparator takes priority and receives `(left, right, context)`. Return a finite number to control the order or `NaN` to use the built-in comparison.
+
+Enable `column-filterable` for one filter per header and optionally bind `v-model:column-filters` to an array such as `[{ key: 'role', value: 'design' }]`. A header can provide `filterPredicate(value, query, context)`; other columns use case-insensitive substring matching. Global and column filters are combined before sorting and pagination.
 
 The view applies **filter → sort → paginate**. Sorting and filtering never reorder or trim the parent row array. Slot indices and edit/delete payloads keep their absolute source indices. Changing criteria returns to page 1; pagination totals show matching rows, while the main footer still reports the full dataset. Sort selection follows the header key during dragging and clears when that column is removed. Disable either feature to ignore its stored criteria.
 
 Draft edits do not affect sorting or filtering until committed. After saving, a row can move or stop matching the search. Searching, sorting, or navigating cancels any editor still open; ordinary blur saves as before. All rows remain in memory: this is client-side sorting and filtering.
+
+## Edit validation
+
+Pass `validator(value, context)` for table-wide validation, or place a `validator` on a cell or header. The most specific validator wins. Return `true` or `undefined` to accept the value; return an error message (or `false`) to keep the editor open, show an accessible error, and emit `validation-error`.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  :validator="(value) => String(value).trim() ? true : 'A value is required.'"
+  @validation-error="({ message }) => console.warn(message)"
+/>
+```
 
 ## TypeScript
 
@@ -73,7 +90,7 @@ function onCellUpdate(event: CellUpdate) {
 }
 ```
 
-Additional exported types include `ShapeShifterTableProps`, `TableCell`, `TableKey`, `TableFooter`, `TableMenuItem`, `TableSlots`, `TableEventPayloads`, `TableEmits`, `HeaderUpdate`, `ColumnChange`, `RowChange`, `ColumnMove`, and `ContextEvent`.
+Additional exported types include `ShapeShifterTableProps`, `TableCell`, `TableKey`, `TableFooter`, `TableMenuItem`, `TableColumnFilter`, `TableComparator`, `TableValidator`, `ValidationError`, `TableSlots`, `TableEventPayloads`, `TableEmits`, `HeaderUpdate`, `ColumnChange`, `RowChange`, `ColumnMove`, and `ContextEvent`.
 
 Cell fields and custom metadata are `unknown`: narrow or format them before use. Edits normally produce strings, but blurring an unchanged field preserves its original value. Short rows may have missing cells, so slot consumers should use `cell?.field`. All event/slot row indices refer to the complete dataset, including when paginated. The plugin registers the component at runtime; import the named component in typed SFCs for template inference.
 
@@ -186,6 +203,8 @@ Column menus move columns left or right together with their cells. Custom menu a
 | `add-row`, `delete-row` | `{ row, rowIndex }` |
 | `move-column` | `{ from, to }` |
 | `context-events` | `{ event, menu_id, type }` |
+| `update:columnFilters` | Array of `{ key, value }` filters. |
+| `validation-error` | Validation context with `value` and `message`. |
 
 | Slot | Slot props |
 | --- | --- |
@@ -293,7 +312,7 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 ### Current limits
 
 The component renders all rows unless pagination is enabled. It does not provide virtualization,
-server-side queries, validation, or persistent storage. `addable` and `removable`
+server-side queries, or persistent storage. `addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.
 

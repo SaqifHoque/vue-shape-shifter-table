@@ -1,6 +1,24 @@
 import type { ComponentOptionsMixin, DefineComponent, Plugin, SlotsType, VNodeChild } from 'vue'
 
 export type TableKey = string | number
+export interface SortContext {
+  leftRow: TableRow
+  rightRow: TableRow
+  header: TableHeader
+  columnIndex: number
+}
+export type TableComparator = (left: unknown, right: unknown, context: SortContext) => number
+export interface FilterContext { row: TableRow; rowIndex: number; header: TableHeader; columnIndex: number }
+export type ColumnFilterPredicate = (value: unknown, query: string, context: FilterContext) => boolean
+export interface ValidationContext {
+  kind: 'cell' | 'header'
+  header: TableHeader
+  columnIndex: number
+  cell?: TableCell
+  row?: TableRow
+  rowIndex?: number
+}
+export type TableValidator = (value: unknown, context: ValidationContext) => true | string | boolean | void
 
 /** Cell metadata is preserved by table operations. Inputs commit edited values as strings. */
 export interface TableCell {
@@ -11,11 +29,14 @@ export interface TableCell {
   editKey?: unknown
   rowKey?: TableKey
   columnKey?: TableKey
+  validator?: TableValidator
   [metadata: string]: unknown
 }
 
 export interface TableHeader extends TableCell {
   key: TableKey
+  sortComparator?: TableComparator
+  filterPredicate?: ColumnFilterPredicate
 }
 
 /** Short rows and missing cells are supported. Slot consumers must handle undefined cells. */
@@ -28,12 +49,17 @@ export declare function applyColumnOrder(
 ): { headers: TableHeader[]; rows: TableRow[] }
 export interface TableMenuItem { text: string; event: string }
 export interface TableFooter { field?: unknown; [metadata: string]: unknown }
+export interface TableColumnFilter { key: TableKey; value: string }
 
 export interface ShapeShifterTableProps {
   sortable?: boolean
   filterable?: boolean
+  columnFilterable?: boolean
   sort?: TableSort | null
   filter?: string
+  columnFilters?: TableColumnFilter[]
+  comparator?: TableComparator
+  validator?: TableValidator
   headers?: TableHeader[]
   tableData?: TableRow[]
   footers?: TableFooter[]
@@ -74,11 +100,13 @@ export interface RowChange { row: TableRow; rowIndex: number }
 export interface ColumnMove { from: number; to: number }
 export interface TableSort { key: TableKey; direction: 'asc' | 'desc' }
 export interface ContextEvent { event: string; menu_id: TableKey | undefined; type: 'row' | 'column' }
+export interface ValidationError extends ValidationContext { value: unknown; message: string }
 
 /** Public event names and the payload associated with each event. */
 export interface TableEventPayloads {
   'update:sort': TableSort | null
   'update:filter': string
+  'update:columnFilters': TableColumnFilter[]
   'update:headers': TableHeader[]
   'update:tableData': TableRow[]
   'update:page': number
@@ -91,6 +119,7 @@ export interface TableEventPayloads {
   'header-update': HeaderUpdate
   'cell-update': CellUpdate
   'context-events': ContextEvent
+  'validation-error': ValidationError
 }
 export type TableEmits = { [Event in keyof TableEventPayloads]: (payload: TableEventPayloads[Event]) => void }
 

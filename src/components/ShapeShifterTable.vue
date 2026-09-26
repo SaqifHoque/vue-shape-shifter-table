@@ -13,6 +13,13 @@
       <button v-if="localFilter" class="sst__button sst__button--secondary" type="button" @click="changeFilter('')">Clear search</button>
       <span role="status">{{ resultCount }} of {{ localRows.length }} rows match</span>
     </div>
+    <div v-if="columnFilterable" class="sst__column-filters" aria-label="Column filters">
+      <label v-for="header in localHeaders" :key="header.key">
+        <span>{{ header.field }}</span>
+        <input type="search" :aria-label="`Filter ${header.field}`" :value="columnFilterValue(header.key)" @input="changeColumnFilter(header.key, $event.target.value)" />
+      </label>
+      <button v-if="localColumnFilters.length" class="sst__button sst__button--secondary" type="button" @click="clearColumnFilters">Clear filters</button>
+    </div>
     <div class="sst__frame" :style="{ maxHeight }">
       <table ref="tableElement" class="sst__table">
         <thead :class="{ 'sst__head--sticky': stickyHeader }">
@@ -32,6 +39,8 @@
                     class="sst__editor sst__editor--header"
                     :value="draftValue"
                     :aria-label="`Edit ${header.field || 'column'} heading`"
+                    :aria-invalid="validationError ? 'true' : undefined"
+                    :aria-describedby="validationError ? 'sst-validation-error' : undefined"
                     @input="updateHeaderDraft(columnIndex, $event)"
                     @keydown.enter="finishEditing"
                     @keydown.esc="cancelEditing"
@@ -83,6 +92,8 @@
                     class="sst__editor"
                     :value="draftValue"
                     :aria-label="`Edit row ${rowIndex + 1}, ${header.field}`"
+                    :aria-invalid="validationError ? 'true' : undefined"
+                    :aria-describedby="validationError ? 'sst-validation-error' : undefined"
                     @input="updateCellDraft(rowIndex, columnIndex, $event)"
                     @keydown.enter="finishEditing"
                     @keydown.esc="cancelEditing"
@@ -117,6 +128,7 @@
         <button v-if="addable" class="sst__button sst__button--primary" type="button" :disabled="!localHeaders.length" @click="addRow"><span aria-hidden="true">＋</span> Row</button>
       </div>
     </footer>
+    <p v-if="validationError" id="sst-validation-error" class="sst__validation-error" role="alert">{{ validationError }}</p>
     <span class="sst__sr-only" role="status">{{ moveAnnouncement }}</span>
     <nav v-if="pagination" class="sst__pagination" aria-label="Table pagination">
       <label>Rows per page
@@ -157,8 +169,12 @@ const props = defineProps({
   pageSizeOptions: { type: Array, default: () => [10, 25, 50] },
   sortable: { type: Boolean, default: false },
   filterable: { type: Boolean, default: false },
+  columnFilterable: { type: Boolean, default: false },
   sort: { type: Object, default: null },
   filter: { type: String, default: '' },
+  columnFilters: { type: Array, default: () => [] },
+  comparator: { type: Function, default: null },
+  validator: { type: Function, default: null },
 })
 
 const emit = defineEmits([
@@ -166,6 +182,7 @@ const emit = defineEmits([
   'delete-row', 'move-column', 'header-update', 'cell-update', 'context-events',
   'update:page', 'update:pageSize',
   'update:sort', 'update:filter',
+  'update:columnFilters', 'validation-error',
 ])
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -180,6 +197,7 @@ const localRows = ref(cloneRows(props.tableData))
 const editingId = ref(null)
 const editingTarget = ref(null)
 const draftValue = ref('')
+const validationError = ref('')
 const editorRef = ref(null)
 let sequence = 0
 const tableElement = shallowRef(null)
@@ -222,22 +240,40 @@ const normalizeSort = (sort) => sort && ['string', 'number'].includes(typeof sor
   ? { key: sort.key, direction: sort.direction } : null
 const localSort = ref(normalizeSort(props.sort))
 const localFilter = ref(typeof props.filter === 'string' ? props.filter : '')
+const normalizeColumnFilters = (filters) => Array.isArray(filters) ? filters
+  .filter((entry) => isObject(entry) && ['string', 'number'].includes(typeof entry.key) && typeof entry.value === 'string' && entry.value)
+  .map(({ key, value }) => ({ key, value })) : []
+const localColumnFilters = ref(normalizeColumnFilters(props.columnFilters))
 const scalarText = (value) => ['string', 'number', 'boolean', 'bigint'].includes(typeof value) ? String(value) : ''
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 const processedRows = computed(() => {
   const query = props.filterable ? localFilter.value.trim().toLowerCase() : ''
-  const rows = localRows.value.map((row, rowIndex) => ({ row, rowIndex })).filter(({ row }) =>
-    !query || localHeaders.value.some((_, index) => scalarText(row[index]?.field).toLowerCase().includes(query)))
+  const rows = localRows.value.map((row, rowIndex) => ({ row, rowIndex })).filter(({ row, rowIndex }) =>
+    (!query || localHeaders.value.some((_, index) => scalarText(row[index]?.field).toLowerCase().includes(query))) &&
+    (!props.columnFilterable || localColumnFilters.value.every(({ key, value }) => {
+      const index = localHeaders.value.findIndex((header) => header.key === key)
+      if (index < 0) return true
+      const field = row[index]?.field
+      const predicate = localHeaders.value[index].filterPredicate
+      return typeof predicate === 'function'
+        ? Boolean(predicate(field, value, { row, rowIndex, header: localHeaders.value[index], columnIndex: index }))
+        : scalarText(field).toLowerCase().includes(value.trim().toLowerCase())
+    })))
   const column = props.sortable && localSort.value ? localHeaders.value.findIndex((header) => header.key === localSort.value.key) : -1
   if (column >= 0) rows.sort((a, b) => {
     const left = a.row[column]?.field
     const right = b.row[column]?.field
     const leftText = scalarText(left)
     const rightText = scalarText(right)
-    // Empty and unsupported values remain last in either direction.
-    if (!leftText || !rightText) return Number(!leftText) - Number(!rightText) || a.rowIndex - b.rowIndex
-    const comparison = typeof left === 'number' && typeof right === 'number' && Number.isFinite(left) && Number.isFinite(right)
-      ? left - right : collator.compare(leftText, rightText)
+    const header = localHeaders.value[column]
+    const customComparator = typeof header.sortComparator === 'function' ? header.sortComparator : props.comparator
+    const custom = typeof customComparator === 'function'
+      ? Number(customComparator(left, right, { leftRow: a.row, rightRow: b.row, header, columnIndex: column })) : NaN
+    // Empty and unsupported values remain last unless a custom comparator handles them.
+    if (!Number.isFinite(custom) && (!leftText || !rightText)) return Number(!leftText) - Number(!rightText) || a.rowIndex - b.rowIndex
+    const comparison = Number.isFinite(custom) ? custom
+      : typeof left === 'number' && typeof right === 'number' && Number.isFinite(left) && Number.isFinite(right)
+        ? left - right : collator.compare(leftText, rightText)
     return comparison * (localSort.value.direction === 'asc' ? 1 : -1) || a.rowIndex - b.rowIndex
   })
   return rows
@@ -276,9 +312,33 @@ function changeFilter(filter) {
   changePage(1)
   emit('update:filter', next)
 }
+function columnFilterValue(key) { return localColumnFilters.value.find((entry) => entry.key === key)?.value ?? '' }
+function changeColumnFilter(key, value) {
+  const next = localColumnFilters.value.filter((entry) => entry.key !== key)
+  if (value) next.push({ key, value })
+  localColumnFilters.value = next
+  cancelEditing()
+  changePage(1)
+  emit('update:columnFilters', next.map((entry) => ({ ...entry })))
+}
+function clearColumnFilters() {
+  if (!localColumnFilters.value.length) return
+  localColumnFilters.value = []
+  cancelEditing()
+  changePage(1)
+  emit('update:columnFilters', [])
+}
 watch(() => props.sort, changeSort, { deep: true })
 watch(() => props.filter, changeFilter)
-watch([() => props.sortable, () => props.filterable], () => changePage(1))
+watch(() => props.columnFilters, (filters) => {
+  const next = normalizeColumnFilters(filters)
+  if (JSON.stringify(next) !== JSON.stringify(localColumnFilters.value)) {
+    localColumnFilters.value = next
+    cancelEditing()
+    changePage(1)
+  }
+}, { deep: true })
+watch([() => props.sortable, () => props.filterable, () => props.columnFilterable], () => changePage(1))
 watch(() => localHeaders.value.map((header) => header.key), (keys) => {
   if (localSort.value && !keys.includes(localSort.value.key)) changeSort(null)
 })
@@ -323,6 +383,7 @@ function publish() {
 }
 
 function startEditing(id, target) {
+  validationError.value = ''
   editingId.value = id
   editingTarget.value = target
   draftValue.value = target?.field
@@ -342,10 +403,23 @@ function finishEditing() { editorRef.value?.blur() }
 function cancelEditing() {
   editingId.value = null
   editingTarget.value = null
+  validationError.value = ''
+}
+function validateEdit(value, context, target) {
+  const validate = typeof target?.validator === 'function' ? target.validator
+    : typeof context.header?.validator === 'function' ? context.header.validator : props.validator
+  if (typeof validate !== 'function') return true
+  const result = validate(value, context)
+  if (result === true || result === undefined) return true
+  validationError.value = typeof result === 'string' && result ? result : 'Enter a valid value.'
+  emit('validation-error', { ...context, value, message: validationError.value })
+  nextTick(() => editorRef.value?.focus())
+  return false
 }
 function updateHeaderDraft(columnIndex, event) { draftValue.value = event.target.value }
 function finishHeaderEditing(columnIndex, header) {
   if (editingId.value !== `header-${header.key}`) return
+  if (!validateEdit(draftValue.value, { kind: 'header', header, columnIndex }, header)) return
   editingId.value = null
   editingTarget.value = null
   header.field = draftValue.value
@@ -356,9 +430,11 @@ function finishHeaderEditing(columnIndex, header) {
 function updateCellDraft(rowIndex, columnIndex, event) { draftValue.value = event.target.value }
 function finishCellEditing(rowIndex, columnIndex) {
   if (editingId.value !== cellId(rowIndex, columnIndex)) return
+  const cell = localRows.value[rowIndex][columnIndex]
+  const header = localHeaders.value[columnIndex]
+  if (!validateEdit(draftValue.value, { kind: 'cell', cell, header, row: localRows.value[rowIndex], rowIndex, columnIndex }, cell)) return
   editingId.value = null
   editingTarget.value = null
-  const cell = localRows.value[rowIndex][columnIndex]
   cell.field = draftValue.value
   publish()
   emit('cell-update', { key: cell.key, value: cell.field, editKey: cell.editKey, rowIndex, columnIndex })
@@ -420,6 +496,10 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 .sst__search label { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .sst__search input { min-width: 0; max-width: 100%; padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; font: inherit; }
 .sst__search span { font-size: .85rem; }
+.sst__column-filters { display: flex; align-items: end; gap: .75rem; padding: 1rem; overflow-x: auto; border-bottom: 1px solid var(--sst-line); }
+.sst__column-filters label { display: grid; min-width: 10rem; gap: .35rem; font-size: .75rem; font-weight: 700; }
+.sst__column-filters input { min-width: 0; padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; font: inherit; font-weight: 400; }
+.sst__validation-error { margin: 0; padding: .75rem 1rem; color: #9f1239; background: #fff1f2; border-top: 1px solid #fecdd3; font-size: .85rem; }
 .sst__sort-button { min-width: 2rem; min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; }
 .sst__sort-button:focus-visible { outline: 2px solid var(--sst-accent); }
 .sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }

@@ -144,6 +144,60 @@ test('external criteria and data replacement update view; disabled features pres
   table.unmount()
 })
 
+test('custom comparators and per-column filters compose with pagination', async () => {
+  const filters = []
+  const table = mount({
+    headers: [
+      { key: 'name', field: 'Name', sortComparator: (left, right) => String(left).length - String(right).length },
+      { key: 'role', field: 'Role', filterPredicate: (value, query) => String(value).startsWith(query) },
+    ],
+    rows: [
+      [{ field: 'Alexandra' }, { field: 'Engineer' }],
+      [{ field: 'Bo' }, { field: 'Editor' }],
+      [{ field: 'Cy' }, { field: 'Designer' }],
+    ],
+    props: {
+      sortable: true, columnFilterable: true, pagination: true, pageSize: 1,
+      'onUpdate:columnFilters': (value) => filters.push(value),
+    },
+  })
+  await clickSort(table, 'Name')
+  assert.deepEqual(visibleNames(table), ['Bo', 'Editor'])
+  const input = table.find((node) => node.props['aria-label'] === 'Filter Role')
+  input.props.onInput({ target: { value: 'D' } })
+  await nextTick()
+  assert.deepEqual(visibleNames(table), ['Cy', 'Designer'])
+  assert.deepEqual(filters, [[{ key: 'role', value: 'D' }]])
+  assert.match(text(table.root), /1–1 of 1 rows · Page 1 of 1/)
+  await table.click('Clear filters')
+  assert.deepEqual(filters.at(-1), [])
+  table.unmount()
+})
+
+test('invalid edits stay open and emit an accessible validation error', async () => {
+  const errors = []
+  const table = mount({ props: {
+    validator: (value, { kind }) => kind === 'cell' && String(value).length < 3 ? 'Use at least three characters.' : true,
+    onValidationError: (value) => errors.push(value),
+  } })
+  await table.click('Maya')
+  const input = table.find((node) => node.type === 'input')
+  input.props.onInput({ target: { value: 'X' } })
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(table.rows.value[0][0].field, 'Maya')
+  assert.equal(input.parent !== null, true)
+  assert.equal(table.find((node) => node.props.role === 'alert').text, 'Use at least three characters.')
+  assert.equal(errors[0].rowIndex, 0)
+  assert.equal(errors[0].columnIndex, 0)
+  input.props.onInput({ target: { value: 'Ada' } })
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(table.rows.value[0][0].field, 'Ada')
+  assert.equal(walk(table.root).some((node) => node.props.role === 'alert'), false)
+  table.unmount()
+})
+
 test('pointer dragging moves non-adjacent columns across all pages', async () => {
   const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })),
     rows: [[{ field: 'a' }, { field: 'b' }, { field: 'c' }], [{ field: 'd' }]],

@@ -50,6 +50,13 @@ export declare function applyColumnOrder(
 export interface TableMenuItem { text: string; event: string }
 export interface TableFooter { field?: unknown; [metadata: string]: unknown }
 export interface TableColumnFilter { key: TableKey; value: string }
+export interface TableQuery {
+  page: number
+  pageSize: number
+  sort: TableSort | null
+  filter: string
+  columnFilters: TableColumnFilter[]
+}
 
 export interface ShapeShifterTableProps {
   sortable?: boolean
@@ -60,6 +67,10 @@ export interface ShapeShifterTableProps {
   columnFilters?: TableColumnFilter[]
   comparator?: TableComparator
   validator?: TableValidator
+  serverSide?: boolean
+  totalRows?: number
+  rowOffset?: number
+  loading?: boolean
   headers?: TableHeader[]
   tableData?: TableRow[]
   footers?: TableFooter[]
@@ -120,6 +131,7 @@ export interface TableEventPayloads {
   'cell-update': CellUpdate
   'context-events': ContextEvent
   'validation-error': ValidationError
+  'query-change': TableQuery
 }
 export type TableEmits = { [Event in keyof TableEventPayloads]: (payload: TableEventPayloads[Event]) => void }
 

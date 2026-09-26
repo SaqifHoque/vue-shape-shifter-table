@@ -198,6 +198,38 @@ test('invalid edits stay open and emit an accessible validation error', async ()
   table.unmount()
 })
 
+test('server-side mode emits queries and renders the supplied remote page unchanged', async () => {
+  const queries = []
+  const edits = []
+  const table = mount({
+    rows: [[{ field: 'Remote 3', key: 'remote-3' }, { field: 'Zulu' }], [{ field: 'Remote 4' }, { field: 'Alpha' }]],
+    props: {
+      serverSide: true, totalRows: 8, pagination: true, page: 2, pageSize: 2,
+      sortable: true, filterable: true, rowOffset: 2,
+      onQueryChange: (value) => queries.push(value),
+      onCellUpdate: (value) => edits.push(value),
+    },
+  })
+  await nextTick()
+  assert.deepEqual(visibleNames(table), ['Remote 3', 'Zulu', 'Remote 4', 'Alpha'])
+  assert.match(text(table.root), /3–4 of 8 rows · Page 2 of 4/)
+  await clickSort(table, 'Role')
+  await search(table, 'does not filter locally')
+  assert.deepEqual(visibleNames(table), ['Remote 3', 'Zulu', 'Remote 4', 'Alpha'])
+  assert.deepEqual(queries.at(-1), {
+    page: 1, pageSize: 2, sort: { key: 'role', direction: 'asc' },
+    filter: 'does not filter locally', columnFilters: [],
+  })
+  await table.click('Remote 3')
+  const input = table.find((node) => node.type === 'input' && node.props.type !== 'search')
+  input.props.onInput({ target: { value: 'Updated remote' } })
+  input.props.onBlur()
+  await nextTick()
+  assert.equal(edits[0].rowIndex, 2)
+  assert.equal(table.find((node) => node.props['aria-label'] === 'Delete row 3').type, 'button')
+  table.unmount()
+})
+
 test('pointer dragging moves non-adjacent columns across all pages', async () => {
   const table = mount({ headers: ['A', 'B', 'C'].map((field) => ({ field, key: field })),
     rows: [[{ field: 'a' }, { field: 'b' }, { field: 'c' }], [{ field: 'd' }]],

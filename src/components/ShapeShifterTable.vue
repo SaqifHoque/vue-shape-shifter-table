@@ -1,5 +1,5 @@
 <template>
-  <section class="sst" :class="{ 'sst--compact': compact }">
+  <section class="sst" :class="{ 'sst--compact': compact }" :aria-busy="loading ? 'true' : undefined">
     <header v-if="title || $slots.toolbar" class="sst__toolbar">
       <div>
         <p v-if="eyebrow" class="sst__eyebrow">{{ eyebrow }}</p>
@@ -85,13 +85,13 @@
           <tr v-for="{ row, rowIndex } in visibleRows" :key="rowKey(row, rowIndex)">
             <td v-for="(header, columnIndex) in localHeaders" :key="cellAt(row, columnIndex)?.key || `${rowIndex}-${header.key}`" :class="cellAt(row, columnIndex)?.fixed">
               <div class="sst__cell-layout">
-                <slot name="cell" :cell="cellAt(row, columnIndex)" :header="header" :row-index="rowIndex" :column-index="columnIndex">
+                <slot name="cell" :cell="cellAt(row, columnIndex)" :header="header" :row-index="publicRowIndex(rowIndex)" :column-index="columnIndex">
                   <input
                     v-if="editingId === cellId(rowIndex, columnIndex)"
                     :ref="setEditorRef"
                     class="sst__editor"
                     :value="draftValue"
-                    :aria-label="`Edit row ${rowIndex + 1}, ${header.field}`"
+                    :aria-label="`Edit row ${publicRowIndex(rowIndex) + 1}, ${header.field}`"
                     :aria-invalid="validationError ? 'true' : undefined"
                     :aria-describedby="validationError ? 'sst-validation-error' : undefined"
                     @input="updateCellDraft(rowIndex, columnIndex, $event)"
@@ -104,14 +104,14 @@
                 </slot>
 
                 <details v-if="contextMenuRow.length" class="sst__menu sst__menu--cell">
-                  <summary :aria-label="`Actions for row ${rowIndex + 1}`">•••</summary>
+                  <summary :aria-label="`Actions for row ${publicRowIndex(rowIndex) + 1}`">•••</summary>
                   <div class="sst__menu-panel">
                     <button v-for="item in contextMenuRow" :key="item.event" type="button" @click="emitContext(item.event, cellAt(row, columnIndex)?.key, 'row')">{{ item.text }}</button>
                   </div>
                 </details>
               </div>
             </td>
-            <td v-if="removable" class="sst__row-action"><button type="button" :aria-label="`Delete row ${rowIndex + 1}`" @click="removeRow(rowIndex)">×</button></td>
+            <td v-if="removable" class="sst__row-action"><button type="button" :aria-label="`Delete row ${publicRowIndex(rowIndex) + 1}`" @click="removeRow(rowIndex)">×</button></td>
           </tr>
         </tbody>
 
@@ -120,9 +120,10 @@
         </tfoot>
       </table>
     </div>
+    <p v-if="loading" class="sst__loading" role="status">Loading rows…</p>
 
     <footer class="sst__controls">
-      <p>{{ localRows.length }} {{ localRows.length === 1 ? 'row' : 'rows' }} · {{ localHeaders.length }} columns</p>
+      <p>{{ serverSide ? resultCount : localRows.length }} {{ (serverSide ? resultCount : localRows.length) === 1 ? 'row' : 'rows' }} · {{ localHeaders.length }} columns</p>
       <div>
         <button v-if="addable" class="sst__button sst__button--secondary" type="button" @click="addColumn"><span aria-hidden="true">＋</span> Column</button>
         <button v-if="addable" class="sst__button sst__button--primary" type="button" :disabled="!localHeaders.length" @click="addRow"><span aria-hidden="true">＋</span> Row</button>
@@ -136,7 +137,7 @@
           <option v-for="size in pageSizes" :key="size" :value="size">{{ size }}</option>
         </select>
       </label>
-      <span role="status">{{ resultCount ? pageStart + 1 : 0 }}–{{ Math.min(pageStart + localPageSize, resultCount) }} of {{ resultCount }} rows · Page {{ currentPage }} of {{ pageCount }}</span>
+      <span role="status">{{ resultCount ? pageStart + 1 : 0 }}–{{ pageEnd }} of {{ resultCount }} rows · Page {{ currentPage }} of {{ pageCount }}</span>
       <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
       <button class="sst__button sst__button--secondary" type="button" :disabled="currentPage === pageCount" @click="changePage(currentPage + 1)">Next</button>
     </nav>
@@ -175,6 +176,10 @@ const props = defineProps({
   columnFilters: { type: Array, default: () => [] },
   comparator: { type: Function, default: null },
   validator: { type: Function, default: null },
+  serverSide: { type: Boolean, default: false },
+  totalRows: { type: Number, default: null },
+  rowOffset: { type: Number, default: null },
+  loading: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -183,6 +188,7 @@ const emit = defineEmits([
   'update:page', 'update:pageSize',
   'update:sort', 'update:filter',
   'update:columnFilters', 'validation-error',
+  'query-change',
 ])
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -247,6 +253,7 @@ const localColumnFilters = ref(normalizeColumnFilters(props.columnFilters))
 const scalarText = (value) => ['string', 'number', 'boolean', 'bigint'].includes(typeof value) ? String(value) : ''
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 const processedRows = computed(() => {
+  if (props.serverSide) return localRows.value.map((row, rowIndex) => ({ row, rowIndex }))
   const query = props.filterable ? localFilter.value.trim().toLowerCase() : ''
   const rows = localRows.value.map((row, rowIndex) => ({ row, rowIndex })).filter(({ row, rowIndex }) =>
     (!query || localHeaders.value.some((_, index) => scalarText(row[index]?.field).toLowerCase().includes(query))) &&
@@ -278,7 +285,9 @@ const processedRows = computed(() => {
   })
   return rows
 })
-const resultCount = computed(() => processedRows.value.length)
+const resultCount = computed(() => props.serverSide
+  ? (Number.isSafeInteger(props.totalRows) && props.totalRows >= 0 ? props.totalRows : localRows.value.length)
+  : processedRows.value.length)
 const pageCount = computed(() => Math.max(1, Math.ceil(resultCount.value / localPageSize.value)))
 const currentPage = computed(() => Math.min(localPage.value, pageCount.value))
 const pageStart = computed(() => props.pagination ? (currentPage.value - 1) * localPageSize.value : 0)
@@ -288,8 +297,24 @@ const pageSizes = computed(() => [...new Set([
 ])].sort((a, b) => a - b))
 const visibleRows = computed(() => {
   const start = pageStart.value
-  return props.pagination ? processedRows.value.slice(start, start + localPageSize.value) : processedRows.value
+  return props.pagination && !props.serverSide ? processedRows.value.slice(start, start + localPageSize.value) : processedRows.value
 })
+const pageEnd = computed(() => props.serverSide
+  ? Math.min(pageStart.value + localRows.value.length, resultCount.value)
+  : Math.min(pageStart.value + localPageSize.value, resultCount.value))
+const publicRowIndex = (rowIndex) => props.serverSide
+  ? (Number.isSafeInteger(props.rowOffset) && props.rowOffset >= 0 ? props.rowOffset : pageStart.value) + rowIndex
+  : rowIndex
+const query = computed(() => ({
+  page: currentPage.value,
+  pageSize: localPageSize.value,
+  sort: localSort.value ? { ...localSort.value } : null,
+  filter: localFilter.value,
+  columnFilters: localColumnFilters.value.map((entry) => ({ ...entry })),
+}))
+watch(query, (value) => {
+  if (props.serverSide) emit('query-change', value)
+}, { deep: true, immediate: true })
 
 function sortDirection(key) {
   return localSort.value?.key === key ? (localSort.value.direction === 'asc' ? 'ascending' : 'descending') : 'none'
@@ -437,7 +462,7 @@ function finishCellEditing(rowIndex, columnIndex) {
   editingTarget.value = null
   cell.field = draftValue.value
   publish()
-  emit('cell-update', { key: cell.key, value: cell.field, editKey: cell.editKey, rowIndex, columnIndex })
+  emit('cell-update', { key: cell.key, value: cell.field, editKey: cell.editKey, rowIndex: publicRowIndex(rowIndex), columnIndex })
 }
 function addColumn() {
   cancelDrag()
@@ -466,7 +491,7 @@ function removeColumn(columnIndex) {
 function removeRow(rowIndex) {
   const [row] = localRows.value.splice(rowIndex, 1)
   publish()
-  emit('delete-row', { row, rowIndex })
+  emit('delete-row', { row, rowIndex: publicRowIndex(rowIndex) })
 }
 function moveColumn(columnIndex, direction) {
   reorderColumn(columnIndex, columnIndex + direction)
@@ -500,6 +525,7 @@ function emitContext(event, menuId, type) { emit('context-events', { event, menu
 .sst__column-filters label { display: grid; min-width: 10rem; gap: .35rem; font-size: .75rem; font-weight: 700; }
 .sst__column-filters input { min-width: 0; padding: .5rem; border: 1px solid var(--sst-line); border-radius: .5rem; font: inherit; font-weight: 400; }
 .sst__validation-error { margin: 0; padding: .75rem 1rem; color: #9f1239; background: #fff1f2; border-top: 1px solid #fecdd3; font-size: .85rem; }
+.sst__loading { margin: 0; padding: .75rem 1rem; color: var(--sst-muted); background: #fafafa; border-top: 1px solid var(--sst-line); font-size: .85rem; }
 .sst__sort-button { min-width: 2rem; min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; color: inherit; cursor: pointer; }
 .sst__sort-button:focus-visible { outline: 2px solid var(--sst-accent); }
 .sst__drag-handle { touch-action: none; cursor: grab; border: 0; border-radius: .35rem; background: transparent; color: inherit; min-width: 2rem; min-height: 2rem; font-size: 1.25rem; }

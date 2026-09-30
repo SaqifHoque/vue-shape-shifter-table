@@ -125,6 +125,40 @@ Changing the page size returns to page 1. Deleting rows or replacing the dataset
 
 This is client-side pagination, not server-side fetching or virtualization: all supplied rows remain in memory. No additional runtime dependencies are required.
 
+### Server-side data
+
+Set `server-side` when your API owns filtering, sorting, and pagination. The component displays `tableData` exactly as supplied and emits a complete `query-change` payload whenever page, page size, sort, global search, or column filters change.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="currentPageRows"
+  server-side pagination sortable filterable column-filterable
+  :page="page"
+  :page-size="25"
+  :total-rows="totalRows"
+  :row-offset="(page - 1) * 25"
+  :loading="loading"
+  @query-change="loadRows"
+/>
+```
+
+```js
+async function loadRows(query) {
+  loading.value = true
+  try {
+    const result = await api.list(query)
+    currentPageRows.value = result.rows
+    totalRows.value = result.total
+    page.value = query.page
+  } finally {
+    loading.value = false
+  }
+}
+```
+
+`query-change` contains `{ page, pageSize, sort, filter, columnFilters }` and fires initially. `totalRows` determines page count. `rowOffset` makes slot and edit/delete indices absolute; when omitted, it defaults to the current page offset. The loading state sets `aria-busy` and displays a status message. The component does not perform network requests itself, so cancellation, caching, and error handling remain in your data layer.
+
 A lightweight, editable table component for Vue 3.
 
 Edit cells and headings, add or remove rows and columns, and move columns together
@@ -311,8 +345,8 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 
 ### Current limits
 
-The component renders all rows unless pagination is enabled. It does not provide virtualization,
-server-side queries, or persistent storage. `addable` and `removable`
+The component renders all rows unless pagination is enabled. It does not provide virtualization
+or persistent storage. `addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.
 

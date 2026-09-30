@@ -30,12 +30,12 @@ export interface TableCell {
   rowKey?: TableKey
   columnKey?: TableKey
   validator?: TableValidator
-  width?: number
   [metadata: string]: unknown
 }
 
 export interface TableHeader extends TableCell {
   key: TableKey
+  width?: number
   sortComparator?: TableComparator
   filterPredicate?: ColumnFilterPredicate
 }
@@ -77,6 +77,10 @@ export interface ShapeShifterTableProps {
   persistenceKey?: string
   persistenceStorage?: TableStorage | null
   persistTableData?: boolean
+  virtualized?: boolean
+  rowHeight?: number
+  virtualViewportHeight?: number
+  overscan?: number
   headers?: TableHeader[]
   tableData?: TableRow[]
   footers?: TableFooter[]

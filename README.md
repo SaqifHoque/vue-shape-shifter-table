@@ -1,125 +1,146 @@
 # Vue Shapeshifter Table
 
-## Saved column order (1.1.0)
+A responsive, editable table for Vue 3.
 
-Use `applyColumnOrder` after loading table data to restore a user's preferred order. It returns new `headers` and `rows` arrays with matching column positions; it does not read browser storage or modify your inputs.
+Edit cells, reorder columns, sort, search, and paginate your data. Includes TypeScript declarations and customization slots. Requires Vue 3.3+; no additional UI framework or runtime dependencies.
+
+![Vue Shapeshifter Table running locally with editing, search, sorting, and pagination](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/overview.png)
+
+[Quick start](#quick-start) · [Feature examples](#feature-examples) · [API](#table-api) · [Local demo](#demo)
+
+## Install
+
+```bash
+npm install vue-shapeshifter-table
+```
+
+## Quick start
+
+Copy this into a Vue single-file component. Always import the stylesheet.
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { ShapeShifterTable } from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
+
+const headers = ref([
+  { key: 'project', field: 'Project' },
+  { key: 'owner', field: 'Owner' },
+  { key: 'status', field: 'Status' },
+])
+const rows = ref([
+  [
+    { key: 'aurora-project', field: 'Aurora' },
+    { key: 'aurora-owner', field: 'Maya Chen' },
+    { key: 'aurora-status', field: 'Ready' },
+  ],
+  [
+    { key: 'northstar-project', field: 'Northstar' },
+    { key: 'northstar-owner', field: 'Owen Blake' },
+    { key: 'northstar-status', field: 'In review' },
+  ],
+  [
+    { key: 'pulse-project', field: 'Pulse' },
+    { key: 'pulse-owner', field: 'Amara Wells' },
+    { key: 'pulse-status', field: 'Exploring' },
+  ],
+])
+</script>
+
+<template>
+  <ShapeShifterTable
+    v-model:headers="headers"
+    v-model:table-data="rows"
+    title="Projects"
+  />
+</template>
+```
+
+Each row is an array of cells in header order. `field` is the displayed value; `key` is a stable identifier. Bind **both** models to retain edits and keep cells aligned when columns move. Headers and cells are editable unless `editable: false`.
+
+For global registration, use the default plugin instead:
 
 ```js
-import { applyColumnOrder } from 'vue-shapeshifter-table'
+import { createApp } from 'vue'
+import ShapeshifterTable from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
+import App from './App.vue'
 
-// Save only keys after the user chooses to save their preferences.
-function saveOrder() {
-  try {
-    localStorage.setItem('my-table:column-order:v1', JSON.stringify(headers.value.map(h => h.key)))
-  } catch {
-    // Storage can be unavailable or full. Keep the table usable.
-  }
-}
-
-// In onMounted (or after fetching data), so SSR does not access localStorage.
-function restoreOrder() {
-  try {
-    const order = JSON.parse(localStorage.getItem('my-table:column-order:v1') ?? 'null')
-    const restored = applyColumnOrder(headers.value, rows.value, order)
-    headers.value = restored.headers
-    rows.value = restored.rows
-  } catch {
-    // Malformed saved JSON or an invalid schema: retain the current table.
-  }
-}
+createApp(App).use(ShapeshifterTable).mount('#app')
 ```
 
-Headers must have unique string or finite numeric keys. Saved keys for removed columns and duplicate/invalid saved entries are ignored. New columns are appended in their current schema order. Non-array preferences leave the order unchanged. Numeric `0` and string `'0'` are distinct keys. Short rows keep empty positions, and extra cells beyond the schema are retained. Header/cell objects are shallow copies; nested custom metadata remains shared.
+## Feature examples
 
-Restore only after loading the matching row data. Persist keys rather than row contents; the library makes no storage or network calls. Reset by restoring your default key list and removing your own storage key. Column widths are not currently supported. The demo's explicit save/reset controls illustrate this flow.
+Each example below reuses `headers`, `rows`, and the imports from the quick start. Replace its `<ShapeShifterTable>` with the example shown; add any extra JavaScript to `<script setup>`. Features can be combined. Screenshots show the local demo with sample data.
 
-Version 1.1.0 also includes pagination, drag-and-drop, sorting/search, and TypeScript declarations. See [CHANGELOG.md](./CHANGELOG.md) for the release contents. Publishing to npm is a separate authenticated step; a version in this repository does not confirm registry availability.
+- [Inline editing](#inline-editing)
+- [Pagination](#pagination)
+- [Drag-and-drop columns](#drag-and-drop-columns)
+- [Sorting](#sorting)
+- [Search](#search)
+- [Custom sorting and column filters](#custom-sorting-and-column-filters)
+- [Edit validation](#edit-validation)
+- [Combining features](#combining-features)
+- [Saved column order](#saved-column-order)
+- [Automatic persistence](#automatic-persistence)
+- [Resizable columns](#resizable-columns)
+- [Row virtualization](#row-virtualization)
+- [Server-side data](#server-side-data)
+- [Adding and removing rows and columns](#adding-and-removing-rows-and-columns)
+- [Custom cells and toolbar](#custom-cells-and-toolbar)
+- [Custom actions](#custom-actions)
+- [Appearance](#appearance)
+- [TypeScript](#typescript)
 
-## Sorting and search
+### Inline editing
 
-Enable `sortable` for a separate sort button on each heading and `filterable` for global search. Both are off by default. They work with pagination and column dragging without adding dependencies:
+Click a cell or heading to edit. Enter or blur saves; Escape cancels.
 
 ```vue
 <ShapeShifterTable
   v-model:headers="headers"
   v-model:table-data="rows"
-  v-model:sort="sort"
-  v-model:filter="filter"
-  sortable filterable pagination
-  :page-size="10"
+  @cell-update="onCellUpdate"
 />
 ```
 
-Initialize `sort` as `ref<TableSort | null>(null)` (import `TableSort` from the package) and `filter` as `ref('')`. In JavaScript, use `ref(null)` for sort. Bindings are optional; internal state also works. `sort` has the shape `{ key: 'name', direction: 'asc' }`, using a stable header key. Clicking the sort button cycles ascending → descending → original order; it emits `update:sort`. Search emits `update:filter` with the entered text.
-
-Search uses a trimmed, case-insensitive substring across columns defined by the headers. It matches string, number, boolean, and bigint cell fields; missing cells and objects are treated as empty. Sorting is stable, compares finite numbers numerically, and otherwise uses English natural text order (so `Item 2` precedes `Item 10`). Empty and unsupported values stay last in either direction.
-
-Use a global `comparator` prop or a header's `sortComparator` to define custom ordering. The header comparator takes priority and receives `(left, right, context)`. Return a finite number to control the order or `NaN` to use the built-in comparison.
-
-Enable `column-filterable` for one filter per header and optionally bind `v-model:column-filters` to an array such as `[{ key: 'role', value: 'design' }]`. A header can provide `filterPredicate(value, query, context)`; other columns use case-insensitive substring matching. Global and column filters are combined before sorting and pagination.
-
-The view applies **filter → sort → paginate**. Sorting and filtering never reorder or trim the parent row array. Slot indices and edit/delete payloads keep their absolute source indices. Changing criteria returns to page 1; pagination totals show matching rows, while the main footer still reports the full dataset. Sort selection follows the header key during dragging and clears when that column is removed. Disable either feature to ignore its stored criteria.
-
-Draft edits do not affect sorting or filtering until committed. After saving, a row can move or stop matching the search. Searching, sorting, or navigating cancels any editor still open; ordinary blur saves as before. All rows remain in memory: this is client-side sorting and filtering.
-
-## Edit validation
-
-Pass `validator(value, context)` for table-wide validation, or place a `validator` on a cell or header. The most specific validator wins. Return `true` or `undefined` to accept the value; return an error message (or `false`) to keep the editor open, show an accessible error, and emit `validation-error`.
-
-```vue
-<ShapeShifterTable
-  v-model:headers="headers"
-  v-model:table-data="rows"
-  :validator="(value) => String(value).trim() ? true : 'A value is required.'"
-  @validation-error="({ message }) => console.warn(message)"
-/>
-```
-
-## TypeScript
-
-The package includes declarations for the named component, default plugin, props, events, and slots. No separate `@types` package is needed. Use Vue 3.3+ and TypeScript 5+ with `moduleResolution: "Bundler"` or `"NodeNext"`.
-
-```ts
-import { ref } from 'vue'
-import { ShapeShifterTable, type TableHeader, type TableRow, type CellUpdate } from 'vue-shapeshifter-table'
-
-const headers = ref<TableHeader[]>([{ key: 'name', field: 'Name' }])
-const rows = ref<TableRow[]>([[{ key: 'ada', field: 'Ada' }]])
-function onCellUpdate(event: CellUpdate) {
-  console.log(event.rowIndex, event.columnIndex, event.value)
+```js
+function onCellUpdate({ rowIndex, columnIndex, value }) {
+  console.log('Updated cell:', rowIndex, columnIndex, value)
 }
+
+// Make one heading and one cell read-only.
+headers.value[0].editable = false
+rows.value[0][0].editable = false
 ```
 
-Additional exported types include `ShapeShifterTableProps`, `TableCell`, `TableKey`, `TableFooter`, `TableMenuItem`, `TableColumnFilter`, `TableComparator`, `TableValidator`, `ValidationError`, `TableSlots`, `TableEventPayloads`, `TableEmits`, `HeaderUpdate`, `ColumnChange`, `RowChange`, `ColumnMove`, and `ContextEvent`.
+Setting `editable: false` on a header locks its label, not every cell in that column. Set it on the individual cells too when needed. Changed values are strings; convert or validate them in your application. Event indices always refer to the full source dataset, including when sorted, searched, or paginated.
 
-Cell fields and custom metadata are `unknown`: narrow or format them before use. Edits normally produce strings, but blurring an unchanged field preserves its original value. Short rows may have missing cells, so slot consumers should use `cell?.field`. All event/slot row indices refer to the complete dataset, including when paginated. The plugin registers the component at runtime; import the named component in typed SFCs for template inference.
+![Editing a project name in the local demo](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/inline-editing.png)
 
-Run `npm run test:types` for local Vue consumer checks. `npm test` also extracts the npm tarball and checks TypeScript and Vue consumers against its exported declarations using both Bundler and NodeNext resolution. The declarations add no JavaScript or runtime dependencies.
+### Pagination
 
-## Drag-and-drop columns
-
-Enable `draggable-columns` on `ShapeShifterTable` to display drag handles. Drag a handle onto another heading to move its column to that position; the target heading is highlighted. Pointer events support mouse, touch, and pen. Moving a column also moves its cells in every row, including rows hidden by pagination.
-
-Focus a handle and press Left or Right to move using the keyboard. Escape, pointer cancellation, or dropping outside this table cancels a drag. The existing Move left/right menu actions remain available. Reordering emits `update:headers`, `update:tableData`, and `move-column` with zero-based `{ from, to }` indices. Bind both data models to retain changes.
-
-Dragging is off by default and adds no dependencies. This implementation does not auto-scroll the table during a drag; use the move buttons or scroll before dragging to a distant column.
-
-### Resizable columns
-
-Add `resizable-columns` to expose pointer and keyboard resize handles. Widths are stored on each header as numeric `width` values and emitted through `update:headers`; `column-resize` reports `{ key, width, columnIndex }`. Focus a handle and press Left or Right for 10-pixel steps. Use `minimum-column-width` to change the default 96-pixel floor.
+Display two rows at a time, with page navigation and a page-size selector:
 
 ```vue
 <ShapeShifterTable
   v-model:headers="headers"
   v-model:table-data="rows"
-  resizable-columns
-  :minimum-column-width="120"
+  pagination
+  :page-size="2"
+  :page-size-options="[2, 10, 25]"
 />
 ```
 
-## Pagination
+To control the page from your application, add these refs:
 
-Pagination is optional and off by default. Enable it to render a page of the supplied rows while retaining the full array in `v-model:table-data`:
+```js
+const page = ref(1)
+const pageSize = ref(2)
+```
+
+Then use `v-model:page` and `v-model:page-size`:
 
 ```vue
 <ShapeShifterTable
@@ -128,19 +149,35 @@ Pagination is optional and off by default. Enable it to render a page of the sup
   v-model:page="page"
   v-model:page-size="pageSize"
   pagination
-  :page-size-options="[10, 25, 50]"
+  :page-size-options="[2, 10, 25]"
 />
 ```
 
-Initialize `page` with `ref(1)` and `pageSize` with `ref(10)`. These bindings are optional: the component also maintains page state internally. `page` is one-based; `pageSize` defaults to 10. Invalid numbers fall back to 1 and 10 respectively. The current page size is always included in the selector.
+Pages start at 1. Changing page size resets to page 1; removing rows clamps the current page. This is client-side pagination: pass the complete dataset. Navigation cancels unsaved edits, and added rows appear at the end of the dataset.
 
-Changing the page size returns to page 1. Deleting rows or replacing the dataset clamps the page to the last available page. Empty tables show page 1 of 1 with navigation disabled. Added rows are appended to the dataset without moving the current page. Cell events and slot `rowIndex` values always refer to the full dataset, not the visible page. Navigation cancels any draft still open; ordinary input blur saves edits as before.
+![Page 2 shows the third project with the first two rows on the previous page](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/pagination.png)
 
-This is client-side pagination, not server-side fetching or virtualization: all supplied rows remain in memory. No additional runtime dependencies are required.
+### Row virtualization
+
+Enable `virtualized` for large local datasets. Only the visible window plus `overscan` rows is mounted; spacer rows preserve the full scroll range.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  virtualized
+  :row-height="48"
+  :virtual-viewport-height="480"
+  :overscan="3"
+  max-height="480px"
+/>
+```
+
+Use a fixed body-row height and set `virtual-viewport-height` to the frame's visible height. Sorting, filters, editing, deletion, slots, pagination, and server-provided pages retain source indices. Virtualization reduces DOM work while keeping supplied rows in memory.
 
 ### Server-side data
 
-Set `server-side` when your API owns filtering, sorting, and pagination. The component displays `tableData` exactly as supplied and emits a complete `query-change` payload whenever page, page size, sort, global search, or column filters change.
+Set `server-side` when an API owns filtering, sorting, and pagination. The table renders the supplied page unchanged and emits `query-change` initially and whenever query controls change.
 
 ```vue
 <ShapeShifterTable
@@ -156,28 +193,225 @@ Set `server-side` when your API owns filtering, sorting, and pagination. The com
 />
 ```
 
-```js
-async function loadRows(query) {
-  loading.value = true
-  try {
-    const result = await api.list(query)
-    currentPageRows.value = result.rows
-    totalRows.value = result.total
-    page.value = query.page
-  } finally {
-    loading.value = false
-  }
-}
-```
+`query-change` contains `{ page, pageSize, sort, filter, columnFilters }`. `totalRows` determines page count; `rowOffset` makes slots and edit/add/delete events absolute. When omitted, the offset follows the current page. Loading sets `aria-busy` and announces status. Networking, caching, cancellation, and errors stay in the application.
 
-`query-change` contains `{ page, pageSize, sort, filter, columnFilters }` and fires initially. `totalRows` determines page count. `rowOffset` makes slot and edit/delete indices absolute; when omitted, it defaults to the current page offset. The loading state sets `aria-busy` and displays a status message. The component does not perform network requests itself, so cancellation, caching, and error handling remain in your data layer.
+### Drag-and-drop columns
 
-### Automatic persistence
-
-Set `persistence-key` to restore and automatically save column order and widths, sorting, filters, page, and page size in `localStorage`. Browser access starts after mount, so server-side rendering remains safe.
+Enable drag handles and move a column by dropping its handle onto another heading:
 
 ```vue
 <ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  draggable-columns
+  @move-column="onColumnMove"
+/>
+```
+
+```js
+function onColumnMove({ from, to }) {
+  console.log('Moved column:', from, 'to', to)
+}
+```
+
+Mouse, touch, and pen are supported. For keyboard control, focus a handle and press Left or Right. Escape or dropping outside the table cancels a drag. The heading menu also has **Move left** and **Move right** actions.
+
+Cells move with their columns across **all** rows, including hidden pages. Indices in `move-column` are zero-based. Holding a dragged handle near a horizontal or vertical table edge auto-scrolls the frame so distant columns remain reachable.
+
+![Dragging the Project column onto Status highlights the drop target](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/drag-and-drop.png)
+
+### Resizable columns
+
+Add `resizable-columns` for pointer and keyboard resize handles. Widths are numeric `width` values on headers and flow through `update:headers`; `column-resize` reports `{ key, width, columnIndex }`. Focus a handle and press Left or Right for 10-pixel steps.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  resizable-columns
+  :minimum-column-width="120"
+/>
+```
+
+The minimum width defaults to 96 pixels. Combine this with a `persistence-key` to restore widths automatically.
+
+### Sorting
+
+Add `sortable` to enable a sort button on each heading:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  sortable
+/>
+```
+
+Click to cycle ascending → descending → original order. To start with a selected sort, add a ref:
+
+```js
+const sort = ref({ key: 'project', direction: 'asc' })
+```
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  v-model:sort="sort"
+  sortable
+/>
+```
+
+The key identifies a header. Sorting is stable and does not reorder the source array. Finite numbers sort numerically; other supported values use English natural text order. Empty or unsupported values stay last. A selected sort follows its column when dragged and clears when the column is removed.
+
+![Projects sorted in descending order with Pulse first](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/sorting.png)
+
+### Custom sorting and column filters
+
+Pass a global `comparator(left, right, context)` or add `sortComparator` to one header. A header comparator takes priority. Return a finite number to control ordering or `NaN` to use the built-in comparison.
+
+Enable `column-filterable` for one search field per header. Bind `v-model:column-filters` to state such as `[{ key: 'status', value: 'ready' }]`. Add `filterPredicate(value, query, context)` to a header for custom matching; other columns use case-insensitive substring matching.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  v-model:column-filters="columnFilters"
+  sortable
+  column-filterable
+  :comparator="compareValues"
+/>
+```
+
+Global search and column filters are combined before sorting and pagination.
+
+### Search
+
+Add `filterable` for a search field across all defined columns:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  filterable
+/>
+```
+
+To bind the search text to your application, add `const filter = ref('')` and use:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  v-model:filter="filter"
+  filterable
+/>
+```
+
+Search is trimmed and case-insensitive. It matches substrings in string, number, boolean, and bigint fields; objects and missing cells count as empty. Searching does not remove rows from your source array. Changing the search returns to page 1.
+
+![Searching for Maya shows only the matching Aurora project](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/search.png)
+
+### Edit validation
+
+Pass `validator(value, context)` for table-wide validation, or place a `validator` on a cell or header. The most specific validator wins. Return `true` or `undefined` to accept; return a message or `false` to keep the editor open, announce the error, and emit `validation-error`.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  :validator="value => String(value).trim() ? true : 'A value is required.'"
+  @validation-error="({ message }) => console.warn(message)"
+/>
+```
+
+### Combining features
+
+Editing, dragging, sorting, search, and pagination work together:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  title="Projects"
+  sortable
+  filterable
+  column-filterable
+  draggable-columns
+  resizable-columns
+  pagination
+  :page-size="2"
+  :page-size-options="[2, 10, 25]"
+/>
+```
+
+The view applies **filter → sort → paginate**. Slot indices and edit/delete events still refer to the original dataset. Draft edits affect the view only after saving; a saved row can move or stop matching a search. Changing search, sort, or page cancels an open editor.
+
+### Saved column order
+
+Save the ordered header keys, then use `applyColumnOrder` to restore them after loading the matching table data. Add this to the quick start's script, replacing its Vue import with `{ onMounted, ref }`:
+
+```js
+import { applyColumnOrder } from 'vue-shapeshifter-table'
+
+const storageKey = 'projects:column-order:v1'
+const defaultOrder = headers.value.map(header => header.key)
+
+function restoreOrder(order) {
+  const restored = applyColumnOrder(headers.value, rows.value, order)
+  headers.value = restored.headers
+  rows.value = restored.rows
+}
+
+function saveOrder() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(headers.value.map(h => h.key)))
+  } catch {
+    // Storage can be unavailable or full; the table still works.
+  }
+}
+
+function resetOrder() {
+  restoreOrder(defaultOrder)
+  try {
+    localStorage.removeItem(storageKey)
+  } catch {
+    // Order resets for this session even if storage is unavailable.
+  }
+}
+
+onMounted(() => {
+  try {
+    restoreOrder(JSON.parse(localStorage.getItem(storageKey) ?? 'null'))
+  } catch {
+    // Keep the current order if stored JSON is invalid or storage is unavailable.
+  }
+})
+```
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  draggable-columns
+/>
+<button type="button" @click="saveOrder">Save column order</button>
+<button type="button" @click="resetOrder">Reset column order</button>
+```
+
+For asynchronous data, restore after fetching the rows and headers. `onMounted` keeps browser storage out of server-side rendering. Only column keys are saved; row data stays in your application.
+
+`applyColumnOrder` returns new arrays and shallow copies of headers/cells without mutating inputs. Unknown, duplicate, or invalid saved keys are ignored; new columns are appended in schema order. Header keys must be unique strings or finite numbers (`0` and `'0'` are distinct). Non-array preferences leave the order unchanged. Short rows preserve empty positions, extra cells are retained, and nested metadata remains shared.
+
+![Saved column order restored after a reload, with Owner before Status and Project](https://cdn.jsdelivr.net/npm/vue-shapeshifter-table@1.2.0/docs/images/saved-column-order.png)
+
+### Automatic persistence
+
+Set `persistence-key` to automatically restore and save column order and widths, sorting, filters, page, and page size in `localStorage`. Storage access begins after mount, so server-side rendering remains safe.
+
+```vue
+<ShapeShifterTable
+  ref="table"
   v-model:headers="headers"
   v-model:table-data="rows"
   persistence-key="projects-table:v1"
@@ -186,176 +420,75 @@ Set `persistence-key` to restore and automatically save column order and widths,
 />
 ```
 
-Rows are excluded by default. Add `persist-table-data` only when storing the table values in the selected storage is appropriate. Supply `persistence-storage` with `getItem`, `setItem`, and `removeItem` methods to use another synchronous store or to test without browser storage. A component ref exposes `clearPersistence()` for reset controls. Storage and malformed-data failures emit `persistence-error` without breaking the table.
+Rows are excluded by default. Add `persist-table-data` only when storing table values is appropriate. Supply `persistence-storage` with `getItem`, `setItem`, and `removeItem` methods to use another synchronous store. A component ref exposes `clearPersistence()`. Storage and malformed-data failures emit `persistence-error` without breaking the table.
 
-A lightweight, editable table component for Vue 3.
+### Adding and removing rows and columns
 
-Edit cells and headings, add or remove rows and columns, and move columns together
-with their data. Includes customization slots, sticky headings, horizontal
-scrolling, and compact spacing. Vue 3.3 or newer is required. The package is
-ESM-only and includes its own CSS; no additional UI framework is required.
-
-[Quick start](#install) · [API](#table-api) · [Examples](#examples) ·
-[Development](#development) · [Demo](#demo) · [License](#license)
-
-## Install
-
-```bash
-npm install vue-shapeshifter-table
-```
-
-Register the plugin globally:
-
-```js
-import { createApp } from 'vue'
-import ShapeshifterTable from 'vue-shapeshifter-table'
-import 'vue-shapeshifter-table/style.css'
-import App from './App.vue'
-
-createApp(App).use(ShapeshifterTable).mount('#app')
-```
-
-Or import the component directly:
-
-```vue
-<script setup>
-import { ref } from 'vue'
-import { ShapeShifterTable } from 'vue-shapeshifter-table'
-import 'vue-shapeshifter-table/style.css'
-
-const headers = ref([
-  { field: 'Name', key: 'name', editable: true },
-])
-
-const rows = ref([
-  [{ field: 'Maya', key: 'maya-name', editable: true }],
-])
-</script>
-
-<template>
-  <ShapeShifterTable v-model:headers="headers" v-model:table-data="rows" />
-</template>
-```
-
-## Table API
-
-Use `v-model:headers` and `v-model:table-data` to keep parent data synchronized with edits. The component edits local copies and emits replacement arrays; it no longer mutates the supplied header and cell objects. One-way props still display data, but parents must handle the update events to retain changes.
-
-Headers use `{ field, key, editable }`; rows are arrays of cell objects in header order. Give headers and cells unique, stable keys. Set `editable: false` to make a heading or cell read-only. Click an editable value to edit it, then press Enter or leave the input to save; Escape discards the draft.
-
-| Prop | Default | Purpose |
-| --- | --- | --- |
-| `headers`, `tableData` | `[]` | Column definitions and rows. |
-| `footers` | `[]` | Footer objects whose `field` values are displayed. |
-| `contextMenuColumn`, `contextMenuRow` | `[]` | Custom actions using `{ text, event }`. |
-| `title`, `eyebrow` | `''` | Optional toolbar heading and label. |
-| `emptyText` | `'Your table is ready'` | Empty-state heading. |
-| `maxHeight` | `'34rem'` | Maximum height of the scrollable table. |
-| `stickyHeader` | `true` | Keep column headings visible while scrolling. |
-| `addable`, `removable` | `true` | Show built-in add and delete controls. |
-| `compact` | `false` | Reduce cell spacing. |
-
-Column menus move columns left or right together with their cells. Custom menu actions emit `context-events` with `{ event, menu_id, type }`; consumers implement those custom actions themselves.
-
-| Event | Payload |
-| --- | --- |
-| `update:headers`, `update:tableData` | Replacement header or row array. |
-| `header-update` | `{ key, value, editKey, columnIndex }` |
-| `cell-update` | `{ key, value, editKey, rowIndex, columnIndex }` |
-| `add-column`, `delete-column` | `{ header, columnIndex }` |
-| `add-row`, `delete-row` | `{ row, rowIndex }` |
-| `move-column` | `{ from, to }` |
-| `context-events` | `{ event, menu_id, type }` |
-| `update:columnFilters` | Array of `{ key, value }` filters. |
-| `validation-error` | Validation context with `value` and `message`. |
-
-| Slot | Slot props |
-| --- | --- |
-| `toolbar` | `addColumn`, `addRow` |
-| `header` | `header`, `columnIndex` |
-| `cell` | `cell`, `header`, `rowIndex`, `columnIndex` |
-| `empty` | None |
-| `footer` | `footers` |
-
-Slot props with multiple words are exposed using camelCase names (`columnIndex`, `rowIndex`, `addColumn`, `addRow`). Custom header and cell slots replace the default editing controls. The table provides scoped styles, horizontal scrolling, and reduced-motion support.
-
-## Examples
-
-### Data format
-
-Each row is an array in the same order as the headers. The `field` property is the
-displayed value, `key` identifies the header or cell, and `editable` defaults to
-enabled unless explicitly set to `false`. Optional `editKey` metadata is included
-in edit events. Prefer plain string or number values; input edits produce strings.
-
-```js
-const headers = ref([
-  { key: 'name', field: 'Name', editable: false },
-  { key: 'role', field: 'Role', editable: true },
-])
-const rows = ref([
-  [
-    { key: 'maya-name', field: 'Maya', editable: false },
-    { key: 'maya-role', field: 'Designer', editable: true },
-  ],
-])
-```
-
-Changing `rows` or `headers` in the parent updates the table. The component copies
-header and cell objects before editing; nested custom metadata is not deep-cloned.
-
-### Custom cells and toolbar
-
-Use this template with the `headers` and `rows` refs from the quick start:
+The default table includes **+ Row**, **+ Column**, row delete buttons, and a column menu with **Delete column**. Listen for changes if your application needs to respond:
 
 ```vue
 <ShapeShifterTable
   v-model:headers="headers"
   v-model:table-data="rows"
-  title="Team"
+  @add-row="({ rowIndex }) => console.log('Added row', rowIndex)"
+  @delete-row="({ rowIndex }) => console.log('Deleted row', rowIndex)"
+  @add-column="({ columnIndex }) => console.log('Added column', columnIndex)"
+  @delete-column="({ columnIndex }) => console.log('Deleted column', columnIndex)"
+/>
+```
+
+Hide the built-in add/delete controls with `:addable="false" :removable="false"`. This does not disable editing or column movement. At least one column is needed to add a row.
+
+### Custom cells and toolbar
+
+Slots let you provide your own cell display, toolbar, empty state, and footer:
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  title="Projects"
   :addable="false"
 >
-  <template #toolbar="actions">
-    <button type="button" @click="actions.addRow()">Add person</button>
+  <template #toolbar="{ addRow }">
+    <button type="button" @click="addRow">Add project</button>
   </template>
-  <template #cell="{ cell }">
-    <strong>{{ cell?.field }}</strong>
+  <template #cell="{ cell, header }">
+    <strong v-if="header.key === 'status'">{{ cell?.field }}</strong>
+    <span v-else>{{ cell?.field }}</span>
   </template>
-  <template #empty>No team members yet.</template>
+  <template #empty>No projects yet.</template>
+  <template #footer>{{ rows.length }} projects in total</template>
 </ShapeShifterTable>
 ```
 
-This cell slot displays values instead of the built-in editor. `addable` controls
-the default add buttons; toolbar callbacks remain available.
+Custom `cell` and `header` slots replace their default editing controls. Short rows can have missing cells, so use `cell?.field`. The toolbar callbacks remain available when the built-in add buttons are hidden.
 
-### Handling changes and custom actions
+### Custom actions
+
+Add menu items and handle their events in your application:
 
 ```vue
 <ShapeShifterTable
   v-model:headers="headers"
   v-model:table-data="rows"
   :context-menu-row="[{ text: 'Inspect cell', event: 'inspect' }]"
-  @cell-update="onCellUpdate"
+  :context-menu-column="[{ text: 'Inspect column', event: 'inspect-column' }]"
   @context-events="onContextAction"
 />
 ```
 
 ```js
-function onCellUpdate({ key, value, rowIndex, columnIndex }) {
-  console.log('Edited cell', { key, value, rowIndex, columnIndex })
-}
-
 function onContextAction({ event, menu_id, type }) {
-  console.log('Custom action', { event, menu_id, type })
+  console.log(event, menu_id, type)
 }
 ```
 
-Row context menus appear on individual cells, so their `menu_id` is the cell key.
-Column context menus supply the header key. Custom actions emit events only;
-implement their effects in the parent. Persistence is also the parent's
-responsibility: connect updates to your API or storage if needed.
+Row context menus appear on individual cells; their `menu_id` is the cell key. Column actions receive the header key. These actions emit events; your handler implements the behavior.
 
 ### Appearance
+
+Use compact spacing, a scrollable height, sticky headings, and accent colors:
 
 ```vue
 <ShapeShifterTable
@@ -368,16 +501,108 @@ responsibility: connect updates to your API or storage if needed.
 />
 ```
 
-The root exposes `--sst-accent`, `--sst-accent-strong`, `--sst-ink`,
-`--sst-muted`, and `--sst-line` CSS variables. Some decorative colors are fixed.
-Always import `vue-shapeshifter-table/style.css` in the consuming application.
+The table scrolls horizontally on smaller screens. Available CSS variables are `--sst-accent`, `--sst-accent-strong`, `--sst-ink`, `--sst-muted`, and `--sst-line`. Some decorative colors are fixed. Always import `vue-shapeshifter-table/style.css`.
 
-### Current limits
+### TypeScript
 
-The component renders all rows unless pagination is enabled. It does not provide virtualization.
-`addable` and `removable`
-control UI visibility; they are not authorization rules. Column movement remains
-available when more than one column exists, even with both set to `false`.
+Declarations are included; no separate `@types` package is needed. In a `<script setup lang="ts">`, use typed refs:
+
+```ts
+import { ref } from 'vue'
+import {
+  ShapeShifterTable,
+  type TableHeader,
+  type TableRow,
+  type TableSort,
+  type CellUpdate,
+} from 'vue-shapeshifter-table'
+import 'vue-shapeshifter-table/style.css'
+
+const headers = ref<TableHeader[]>([{ key: 'name', field: 'Name' }])
+const rows = ref<TableRow[]>([[{ key: 'ada-name', field: 'Ada' }]])
+const sort = ref<TableSort | null>(null)
+
+function onCellUpdate(event: CellUpdate) {
+  console.log(event.rowIndex, event.columnIndex, event.value)
+}
+```
+
+Use TypeScript 5+ with `moduleResolution: "Bundler"` or `"NodeNext"`. Import the named component for template inference. Cell fields and custom metadata are `unknown`; narrow them before use. Props, events, slots, queries, comparators, validators, persistence, and `applyColumnOrder` are typed.
+
+## Table API
+
+### Props
+
+| Prop | Default | Purpose |
+| --- | --- | --- |
+| `headers`, `tableData` | `[]` | Column definitions and rows; bind both with `v-model`. |
+| `sortable`, `filterable` | `false` | Enable sort buttons and global search. |
+| `columnFilterable` | `false` | Enable per-column search fields. |
+| `columnFilters` | `[]` | `{ key, value }` filters; supports `v-model:column-filters`. |
+| `comparator`, `validator` | `null` | Global custom sorting and edit validation callbacks. |
+| `sort` | `null` | `{ key, direction: 'asc' \| 'desc' }`; supports `v-model:sort`. |
+| `filter` | `''` | Search text; supports `v-model:filter`. |
+| `draggableColumns` | `false` | Enable pointer and keyboard drag handles with edge auto-scroll. |
+| `resizableColumns` | `false` | Enable pointer and keyboard column resizing. |
+| `minimumColumnWidth` | `96` | Resize floor in pixels. |
+| `pagination` | `false` | Enable client-side pagination. |
+| `page` | `1` | One-based page; supports `v-model:page`. |
+| `pageSize` | `10` | Rows per page; supports `v-model:page-size`. |
+| `pageSizeOptions` | `[10, 25, 50]` | Page-size choices; the current size is always included. |
+| `serverSide` | `false` | Emit queries and render API-supplied rows unchanged. |
+| `totalRows`, `rowOffset` | inferred | Remote total and absolute index offset. |
+| `loading` | `false` | Mark the table busy and show loading status. |
+| `virtualized` | `false` | Render a fixed-height row window. |
+| `rowHeight`, `virtualViewportHeight`, `overscan` | `48`, `480`, `3` | Virtual-window dimensions. |
+| `persistenceKey` | `''` | Automatically restore and save table preferences. |
+| `persistenceStorage` | `localStorage` | Optional synchronous storage adapter. |
+| `persistTableData` | `false` | Include row values in persisted state. |
+| `footers` | `[]` | Footer objects with displayed `field` values. |
+| `contextMenuColumn`, `contextMenuRow` | `[]` | Custom menu items: `{ text, event }`. |
+| `title`, `eyebrow` | `''` | Optional toolbar heading and label. |
+| `emptyText` | `'Your table is ready'` | Empty-state heading. |
+| `maxHeight` | `'34rem'` | Maximum height of the scrollable table. |
+| `stickyHeader` | `true` | Keep column headings visible while scrolling. |
+| `addable`, `removable` | `true` | Show built-in add and delete controls. |
+| `compact` | `false` | Reduce cell spacing. |
+
+### Events
+
+| Event | Payload |
+| --- | --- |
+| `update:headers`, `update:tableData` | Replacement header or row array. |
+| `update:sort` | `{ key, direction: 'asc' \| 'desc' }` or `null`. |
+| `update:filter` | Search string. |
+| `update:columnFilters` | Array of `{ key, value }` filters. |
+| `update:page`, `update:pageSize` | Page number or page size. |
+| `header-update` | `{ key, value, editKey, columnIndex }` |
+| `cell-update` | `{ key, value, editKey, rowIndex, columnIndex }` |
+| `add-column`, `delete-column` | `{ header, columnIndex }` |
+| `add-row`, `delete-row` | `{ row, rowIndex }` |
+| `move-column` | `{ from, to }` |
+| `context-events` | `{ event, menu_id, type }` |
+| `validation-error` | Validation context with `value` and `message`. |
+| `query-change` | `{ page, pageSize, sort, filter, columnFilters }` |
+| `column-resize` | `{ key, width, columnIndex }` |
+| `persistence-error` | `{ operation, error }` |
+
+### Slots
+
+| Slot | Slot props |
+| --- | --- |
+| `toolbar` | `addColumn`, `addRow` |
+| `header` | `header`, `columnIndex` |
+| `cell` | `cell`, `header`, `rowIndex`, `columnIndex` |
+| `empty` | None |
+| `footer` | `footers` |
+
+Slot props use camelCase. All row indices refer to the full source dataset.
+
+### Data and behavior
+
+Use unique, stable keys for headers and cells. The table emits replacement arrays and shallow copies rather than mutating your supplied objects; nested metadata remains shared. One-way props display data, but you must handle updates to retain changes.
+
+Pagination, dragging, resizing, sorting, filtering, virtualization, server mode, validation, and persistence are opt-in. `addable` and `removable` control UI visibility, not authorization. Virtualized rows require the configured fixed height. Server mode emits query state but leaves networking to the application. Persistence is synchronous and excludes row values unless explicitly enabled. The package is ESM-only.
 
 ## Development
 
@@ -403,47 +628,18 @@ the consumed bundle.
 
 ## Publishing
 
-### Automatic publishing
+The `.github/workflows/publish.yml` workflow publishes a new stable version after it reaches `main`, or can be retried from **Actions → Publish npm package → Run workflow**. It uses npm trusted publishing with GitHub OIDC, verifies the version and lockfile, and runs tests, the demo build, audit, and package inspection before publishing.
 
-`.github/workflows/publish.yml` publishes new stable package versions automatically
-after changes reach `main`. It also supports **Actions → Publish npm package → Run
-workflow** on `main` to retry a failed release. Already-published versions are
-skipped; registry errors stop the release. Versions must increase and match the
-lockfile. Tests, the demo build, the security audit, and a package dry run must pass.
+For each release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`. Already-published versions are skipped; registry and verification failures stop the workflow.
 
-One-time maintainer setup in npm: open this package's **Settings → Trusted
-publishing**, choose **GitHub Actions**, and enter:
-
-- Organization or user: `SaqifHoque`
-- Repository: `vue-shape-shifter-table`
-- Workflow filename: `publish.yml` (not the full path)
-- Environment: leave blank (the workflow does not use a GitHub environment)
-- Allowed actions: enable direct publishing with `npm publish`
-
-This uses short-lived OIDC credentials, not an `NPM_TOKEN` secret, and publishes
-provenance. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
-Protect `main` with required reviews and checks, especially for workflow changes.
-The workflow must be merged into `main` and the npm trust configured before it
-can publish. Merging a version bump authorizes a public release, so review the
-package contents and changelog first. The npm package page's README updates with
-publication; README-only changes require a new package version to appear there.
-
-For each release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`
-in a PR. After merging, check the Actions result and verify the registry with
-`npm view vue-shapeshifter-table version`.
-
-### Manual fallback
-
-Before publishing manually:
+For a manual fallback:
 
 1. Update the version and release notes.
 2. Run `npm test`, `npm run build:demo`, and `npm run security:audit`.
 3. Inspect the package contents with `npm pack --dry-run`.
 4. Publish with `npm publish` after signing in to npm.
 
-`prepublishOnly` runs the test suite and blocks publication when npm reports a
-moderate-or-higher vulnerability. Package consumers receive no runtime
-dependencies; Vue remains a peer dependency.
+`prepublishOnly` runs the test suite and blocks publication when npm reports a moderate-or-higher vulnerability. Package consumers receive no runtime dependencies; Vue remains a peer dependency.
 
 ## Security
 

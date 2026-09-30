@@ -30,6 +30,7 @@ export interface TableCell {
   rowKey?: TableKey
   columnKey?: TableKey
   validator?: TableValidator
+  width?: number
   [metadata: string]: unknown
 }
 
@@ -71,6 +72,11 @@ export interface ShapeShifterTableProps {
   totalRows?: number
   rowOffset?: number
   loading?: boolean
+  resizableColumns?: boolean
+  minimumColumnWidth?: number
+  persistenceKey?: string
+  persistenceStorage?: TableStorage | null
+  persistTableData?: boolean
   headers?: TableHeader[]
   tableData?: TableRow[]
   footers?: TableFooter[]
@@ -112,6 +118,13 @@ export interface ColumnMove { from: number; to: number }
 export interface TableSort { key: TableKey; direction: 'asc' | 'desc' }
 export interface ContextEvent { event: string; menu_id: TableKey | undefined; type: 'row' | 'column' }
 export interface ValidationError extends ValidationContext { value: unknown; message: string }
+export interface ColumnResize { key: TableKey; width: number; columnIndex: number }
+export interface PersistenceError { operation: 'restore' | 'save' | 'clear'; error: unknown }
+export interface TableStorage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+  removeItem(key: string): void
+}
 
 /** Public event names and the payload associated with each event. */
 export interface TableEventPayloads {
@@ -132,6 +145,8 @@ export interface TableEventPayloads {
   'context-events': ContextEvent
   'validation-error': ValidationError
   'query-change': TableQuery
+  'column-resize': ColumnResize
+  'persistence-error': PersistenceError
 }
 export type TableEmits = { [Event in keyof TableEventPayloads]: (payload: TableEventPayloads[Event]) => void }
 

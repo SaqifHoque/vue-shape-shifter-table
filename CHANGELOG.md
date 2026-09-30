@@ -4,6 +4,7 @@
 
 - Add custom sort comparators, per-column filters, and accessible edit validation.
 - Add server-side query mode with remote totals, loading state, and absolute row offsets.
+- Add resizable columns and opt-in automatic table preference/data persistence.
 
 ## 1.1.0
 

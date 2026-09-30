@@ -104,6 +104,19 @@ Focus a handle and press Left or Right to move using the keyboard. Escape, point
 
 Dragging is off by default and adds no dependencies. This implementation does not auto-scroll the table during a drag; use the move buttons or scroll before dragging to a distant column.
 
+### Resizable columns
+
+Add `resizable-columns` to expose pointer and keyboard resize handles. Widths are stored on each header as numeric `width` values and emitted through `update:headers`; `column-resize` reports `{ key, width, columnIndex }`. Focus a handle and press Left or Right for 10-pixel steps. Use `minimum-column-width` to change the default 96-pixel floor.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  resizable-columns
+  :minimum-column-width="120"
+/>
+```
+
 ## Pagination
 
 Pagination is optional and off by default. Enable it to render a page of the supplied rows while retaining the full array in `v-model:table-data`:
@@ -158,6 +171,22 @@ async function loadRows(query) {
 ```
 
 `query-change` contains `{ page, pageSize, sort, filter, columnFilters }` and fires initially. `totalRows` determines page count. `rowOffset` makes slot and edit/delete indices absolute; when omitted, it defaults to the current page offset. The loading state sets `aria-busy` and displays a status message. The component does not perform network requests itself, so cancellation, caching, and error handling remain in your data layer.
+
+### Automatic persistence
+
+Set `persistence-key` to restore and automatically save column order and widths, sorting, filters, page, and page size in `localStorage`. Browser access starts after mount, so server-side rendering remains safe.
+
+```vue
+<ShapeShifterTable
+  v-model:headers="headers"
+  v-model:table-data="rows"
+  persistence-key="projects-table:v1"
+  resizable-columns draggable-columns sortable filterable
+  @persistence-error="({ operation, error }) => console.warn(operation, error)"
+/>
+```
+
+Rows are excluded by default. Add `persist-table-data` only when storing the table values in the selected storage is appropriate. Supply `persistence-storage` with `getItem`, `setItem`, and `removeItem` methods to use another synchronous store or to test without browser storage. A component ref exposes `clearPersistence()` for reset controls. Storage and malformed-data failures emit `persistence-error` without breaking the table.
 
 A lightweight, editable table component for Vue 3.
 
@@ -345,8 +374,8 @@ Always import `vue-shapeshifter-table/style.css` in the consuming application.
 
 ### Current limits
 
-The component renders all rows unless pagination is enabled. It does not provide virtualization
-or persistent storage. `addable` and `removable`
+The component renders all rows unless pagination is enabled. It does not provide virtualization.
+`addable` and `removable`
 control UI visibility; they are not authorization rules. Column movement remains
 available when more than one column exists, even with both set to `false`.
 

@@ -19,7 +19,7 @@ test('published archive exposes strict types to Bundler and NodeNext consumers',
     ], { cwd: root, encoding: 'utf8', env: { ...process.env, npm_config_cache: join(temporary, 'cache') } }))[0]
     assert.ok(packed.files.some((file) => file.path === 'dist/index.d.ts'))
     for (const file of packed.files) {
-      assert.ok(!/^(examples|demo-dist|public|src)\//.test(file.path), `Demo or source in npm archive: ${file.path}`)
+      assert.ok(!/^(examples|demo-dist|public|src|docs-site)\//.test(file.path), `Demo or source in npm archive: ${file.path}`)
     }
     const install = join(temporary, 'node_modules/vue-shapeshifter-table')
     mkdirSync(install, { recursive: true })

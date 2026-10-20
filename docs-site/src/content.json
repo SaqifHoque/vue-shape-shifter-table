@@ -1,0 +1,565 @@
+{
+  "name": "Vue Shapeshifter Table",
+  "package": "vue-shapeshifter-table",
+  "version": "1.1.1",
+  "repo": "vue-shape-shifter-table",
+  "tagline": "A table that adapts to your application.",
+  "isDicom": false,
+  "accent": "violet",
+  "license": "MIT",
+  "pages": [
+    {
+      "id": "overview",
+      "title": "Introduction",
+      "group": "Start here",
+      "lead": "A table that adapts to your application.",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "A reusable Vue 3 component library by Saqif Hoque. Install the package in your own application, connect your data, and shape the surrounding interface however you need."
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Real component, not an iframe or a hosted service.",
+            "ES module package, styles, and public TypeScript declarations.",
+            "Live examples use the published npm package, not a source-code alias."
+          ]
+        },
+        {
+          "kind": "code",
+          "lang": "bash",
+          "text": "npm install vue-shapeshifter-table vue@^3.3.0"
+        },
+        {
+          "kind": "note",
+          "text": "Use the navigation to get started, open the playground, or look up individual props. These docs cover npm version 1.1.1."
+        }
+      ]
+    },
+    {
+      "id": "installation",
+      "title": "Installation",
+      "group": "Start here",
+      "lead": "Add the package to an existing Vue 3 application.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "bash",
+          "text": "npm install vue-shapeshifter-table \"vue@^3.3.0\""
+        },
+        {
+          "kind": "p",
+          "text": "Import the component and its CSS once in your application. Vue is a peer dependency; keep a single compatible Vue instance."
+        },
+        {
+          "kind": "code",
+          "lang": "javascript",
+          "text": "import { ShapeShifterTable } from 'vue-shapeshifter-table'\nimport 'vue-shapeshifter-table/style.css'"
+        },
+        {
+          "kind": "note",
+          "text": "The default export is also a Vue plugin. Named component imports are convenient for local registration. No backend is required by the component."
+        }
+      ]
+    },
+    {
+      "id": "quickstart",
+      "title": "Quick start",
+      "group": "Start here",
+      "lead": "Render the component inside an ordinary div.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<script setup>\nimport { ref } from 'vue'\nimport { ShapeShifterTable } from 'vue-shapeshifter-table'\nimport 'vue-shapeshifter-table/style.css'\n\nconst headers = ref([\n  { key: 'name', field: 'Name' },\n  { key: 'role', field: 'Role' },\n])\nconst rows = ref([\n  [{ field: 'Amina' }, { field: 'Engineer' }],\n  [{ field: 'Rafi' }, { field: 'Designer' }],\n])\n</script>\n\n<template>\n  <div style=\"max-width: 900px\">\n    <ShapeShifterTable v-model:headers=\"headers\"\n      v-model:table-data=\"rows\" sortable filterable />\n  </div>\n</template>"
+        },
+        {
+          "kind": "p",
+          "text": "The div belongs to your application. You control its dimensions, layout, and other UI. The imported package renders the interactive component inside it."
+        },
+        {
+          "kind": "note",
+          "text": "Each column has a stable key. Each row is an array of cell objects; cell content lives in field."
+        }
+      ]
+    },
+    {
+      "id": "playground",
+      "title": "Live playground",
+      "group": "Start here",
+      "lead": "Try the published component and inspect its integration code.",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "This is a real npm consumer, running in your browser. Changes here are demonstration state and reset when you reload."
+        },
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<script setup>\nimport { ref } from 'vue'\nimport { ShapeShifterTable } from 'vue-shapeshifter-table'\nimport 'vue-shapeshifter-table/style.css'\n\nconst headers = ref([\n  { key: 'name', field: 'Name' },\n  { key: 'role', field: 'Role' },\n])\nconst rows = ref([\n  [{ field: 'Amina' }, { field: 'Engineer' }],\n  [{ field: 'Rafi' }, { field: 'Designer' }],\n])\n</script>\n\n<template>\n  <div style=\"max-width: 900px\">\n    <ShapeShifterTable v-model:headers=\"headers\"\n      v-model:table-data=\"rows\" sortable filterable />\n  </div>\n</template>"
+        }
+      ]
+    },
+    {
+      "id": "props",
+      "title": "Props",
+      "group": "API reference",
+      "lead": "Public component inputs from the installed npm TypeScript declarations.",
+      "blocks": [
+        {
+          "kind": "table",
+          "head": [
+            "Prop",
+            "Type",
+            "Purpose"
+          ],
+          "rows": [
+            [
+              "sortable",
+              "boolean",
+              "Enable stable client-side sorting."
+            ],
+            [
+              "filterable",
+              "boolean",
+              "Enable global client-side search."
+            ],
+            [
+              "sort",
+              "TableSort | null",
+              "Controlled sort state: { key, direction } or null."
+            ],
+            [
+              "filter",
+              "string",
+              "Controlled global filter string."
+            ],
+            [
+              "headers",
+              "TableHeader[]",
+              "Column definitions with unique stable keys. Bind with v-model:headers."
+            ],
+            [
+              "tableData",
+              "TableRow[]",
+              "Rows represented as arrays of cell objects. Bind with v-model:table-data."
+            ],
+            [
+              "footers",
+              "TableFooter[]",
+              "Footer entries containing field values."
+            ],
+            [
+              "contextMenuColumn",
+              "TableMenuItem[]",
+              "Custom column menu entries."
+            ],
+            [
+              "contextMenuRow",
+              "TableMenuItem[]",
+              "Custom row menu entries."
+            ],
+            [
+              "title",
+              "string",
+              "Optional table heading."
+            ],
+            [
+              "eyebrow",
+              "string",
+              "Optional small text above the table heading."
+            ],
+            [
+              "emptyText",
+              "string",
+              "Message shown when the table has no rows."
+            ],
+            [
+              "maxHeight",
+              "string",
+              "Maximum scrollable table height."
+            ],
+            [
+              "stickyHeader",
+              "boolean",
+              "Keep the header visible while scrolling."
+            ],
+            [
+              "addable",
+              "boolean",
+              "Allow rows and columns to be added."
+            ],
+            [
+              "removable",
+              "boolean",
+              "Allow rows and columns to be removed."
+            ],
+            [
+              "compact",
+              "boolean",
+              "Use denser table spacing."
+            ],
+            [
+              "draggableColumns",
+              "boolean",
+              "Enable pointer and keyboard column reordering."
+            ],
+            [
+              "pagination",
+              "boolean",
+              "Enable client-side pagination."
+            ],
+            [
+              "page",
+              "number",
+              "Controlled one-based current page."
+            ],
+            [
+              "pageSize",
+              "number",
+              "Rows displayed per page."
+            ],
+            [
+              "pageSizeOptions",
+              "number[]",
+              "Choices in the page-size selector."
+            ]
+          ]
+        },
+        {
+          "kind": "note",
+          "text": "Use kebab-case in templates: tableData becomes table-data. Optional features such as sorting, filtering, pagination, and dragging are off until enabled."
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "title": "Data model & editing",
+      "group": "Guides",
+      "lead": "Understand headers, cells, and change events.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "javascript",
+          "text": "const headers = ref([{ key: 'name', field: 'Name' }])\nconst rows = ref([[{ field: 'Amina', key: 'user-1' }]])"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Header keys must be unique stable strings or finite numbers.",
+            "Rows are arrays in the same column order as headers. Each cell is an object with a field value.",
+            "Bind both headers and table-data so edits and structural changes remain in your application state.",
+            "Cell edits normally produce strings; narrow or convert values before sending them to your API.",
+            "Row indices in edit/delete events refer to the complete source dataset, including when paginated."
+          ]
+        },
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<ShapeShifterTable v-model:headers=\"headers\"\n  v-model:table-data=\"rows\" @cell-update=\"saveCell\" />"
+        },
+        {
+          "kind": "p",
+          "text": "The component emits changes; your application owns server persistence. The component does not automatically save table values."
+        }
+      ]
+    },
+    {
+      "id": "sorting",
+      "title": "Sorting & search",
+      "group": "Guides",
+      "lead": "Turn large local datasets into a useful table.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "javascript",
+          "text": "const sort = ref(null)\nconst filter = ref('')\n// In the template:\n// <ShapeShifterTable v-model:headers=\"headers\"\n//   v-model:table-data=\"rows\" v-model:sort=\"sort\"\n//   v-model:filter=\"filter\" sortable filterable />"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Sort buttons cycle ascending → descending → original order.",
+            "Finite numbers sort numerically; other supported values use natural text order.",
+            "Search uses a trimmed, case-insensitive substring across supported cell values.",
+            "The view applies filtering, then sorting, then pagination without reordering the parent row array."
+          ]
+        },
+        {
+          "kind": "note",
+          "text": "These operations run in the browser over the full supplied dataset. This is not a server-side query or virtualization API. Custom comparators and per-column filters on GitHub are not part of this 1.1.1 reference."
+        }
+      ]
+    },
+    {
+      "id": "pagination",
+      "title": "Pagination",
+      "group": "Guides",
+      "lead": "Display a page of your rows while retaining the full dataset.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<ShapeShifterTable v-model:headers=\"headers\"\n  v-model:table-data=\"rows\" pagination\n  v-model:page=\"page\" v-model:page-size=\"pageSize\"\n  :page-size-options=\"[10, 25, 50]\" />"
+        },
+        {
+          "kind": "table",
+          "head": [
+            "Input",
+            "Behavior"
+          ],
+          "rows": [
+            [
+              "page",
+              "One-based; defaults to 1."
+            ],
+            [
+              "pageSize",
+              "Defaults to 10."
+            ],
+            [
+              "pageSizeOptions",
+              "Defaults to 10, 25, and 50."
+            ],
+            [
+              "Criteria changes",
+              "Sorting and search return the view to page 1."
+            ],
+            [
+              "Deleting rows",
+              "Page is clamped to the available range."
+            ]
+          ]
+        },
+        {
+          "kind": "p",
+          "text": "Paging is opt-in. Every row remains in memory. Draft editing ends when navigating between pages."
+        }
+      ]
+    },
+    {
+      "id": "columns",
+      "title": "Column order & persistence",
+      "group": "Guides",
+      "lead": "Move columns and restore a saved layout.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<ShapeShifterTable v-model:headers=\"headers\"\n  v-model:table-data=\"rows\" draggable-columns />"
+        },
+        {
+          "kind": "p",
+          "text": "Drag a handle or focus it and use the arrow keys. Reordering moves headers and matching cells across all rows, including rows hidden by pagination."
+        },
+        {
+          "kind": "code",
+          "lang": "javascript",
+          "text": "import { applyColumnOrder } from 'vue-shapeshifter-table'\n// Persist keys only, after the user chooses to save:\nlocalStorage.setItem('table-order', JSON.stringify(headers.value.map(h => h.key)))\n// Restore after fetching the matching dataset:\nconst order = JSON.parse(localStorage.getItem('table-order') ?? 'null')\nconst restored = applyColumnOrder(headers.value, rows.value, order)\nheaders.value = restored.headers\nrows.value = restored.rows"
+        },
+        {
+          "kind": "note",
+          "text": "Wrap browser storage reads and writes in try/catch. Stale, duplicate, and unknown saved keys are tolerated; new schema columns are appended. SSR applications should access storage after mounting."
+        }
+      ]
+    },
+    {
+      "id": "slots",
+      "title": "Slots",
+      "group": "API reference",
+      "lead": "Use your own cell, header, toolbar, and empty-state UI.",
+      "blocks": [
+        {
+          "kind": "table",
+          "head": [
+            "Slot",
+            "Slot props"
+          ],
+          "rows": [
+            [
+              "toolbar",
+              "{ addColumn, addRow }"
+            ],
+            [
+              "header",
+              "{ header, columnIndex }"
+            ],
+            [
+              "cell",
+              "{ cell, header, rowIndex, columnIndex }"
+            ],
+            [
+              "empty",
+              "No props."
+            ],
+            [
+              "footer",
+              "{ footers }"
+            ]
+          ]
+        },
+        {
+          "kind": "code",
+          "lang": "vue",
+          "text": "<ShapeShifterTable v-model:headers=\"headers\" v-model:table-data=\"rows\">\n  <template #cell=\"{ cell }\">\n    <strong>{{ cell?.field }}</strong>\n  </template>\n  <template #empty>No records yet.</template>\n</ShapeShifterTable>"
+        },
+        {
+          "kind": "p",
+          "text": "A custom cell slot replaces the default cell presentation. Provide your own editor when using custom interactive cells. Short rows may contain undefined cells."
+        }
+      ]
+    },
+    {
+      "id": "events",
+      "title": "Events",
+      "group": "API reference",
+      "lead": "Observe mutations or control view state.",
+      "blocks": [
+        {
+          "kind": "table",
+          "head": [
+            "Event",
+            "Payload"
+          ],
+          "rows": [
+            [
+              "update:headers",
+              "TableHeader[]"
+            ],
+            [
+              "update:tableData",
+              "TableRow[]"
+            ],
+            [
+              "update:sort",
+              "TableSort | null"
+            ],
+            [
+              "update:filter",
+              "string"
+            ],
+            [
+              "update:page / update:pageSize",
+              "number"
+            ],
+            [
+              "cell-update",
+              "{ key, value, editKey, rowIndex, columnIndex }"
+            ],
+            [
+              "header-update",
+              "{ key, value, editKey, columnIndex }"
+            ],
+            [
+              "add-row / delete-row",
+              "{ row, rowIndex }"
+            ],
+            [
+              "add-column / delete-column",
+              "{ header, columnIndex }"
+            ],
+            [
+              "move-column",
+              "{ from, to }"
+            ],
+            [
+              "context-events",
+              "{ event, menu_id, type }"
+            ]
+          ]
+        },
+        {
+          "kind": "code",
+          "lang": "javascript",
+          "text": "function onCellUpdate(event) {\n  // rowIndex is the absolute source row, even with pagination.\n  console.log(event.rowIndex, event.columnIndex, event.value)\n}"
+        }
+      ]
+    },
+    {
+      "id": "typescript",
+      "title": "TypeScript & SSR",
+      "group": "API reference",
+      "lead": "Typed component bindings without a separate @types package.",
+      "blocks": [
+        {
+          "kind": "code",
+          "lang": "typescript",
+          "text": "import { ref } from 'vue'\nimport { ShapeShifterTable, type TableHeader, type TableRow,\n  type CellUpdate, type TableSort } from 'vue-shapeshifter-table'\nconst headers = ref<TableHeader[]>([{ key: 'name', field: 'Name' }])\nconst rows = ref<TableRow[]>([[{ field: 'Amina' }]])\nconst sort = ref<TableSort | null>(null)\nfunction save(event: CellUpdate) { console.log(event.value) }"
+        },
+        {
+          "kind": "p",
+          "text": "Use Vue 3.3+ and TypeScript 5+ with Bundler or NodeNext module resolution. Cell fields are unknown; narrow them before formatting or using them as a domain type."
+        },
+        {
+          "kind": "note",
+          "text": "Registering the default plugin works at runtime. Import the named component in typed Vue SFCs for template inference. Read and write localStorage only after mounting in SSR applications."
+        }
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting",
+      "group": "Resources",
+      "lead": "Check data bindings, styles, and client-side behavior.",
+      "blocks": [
+        {
+          "kind": "table",
+          "head": [
+            "Symptom",
+            "Check"
+          ],
+          "rows": [
+            [
+              "No styles",
+              "Import vue-shapeshifter-table/style.css once."
+            ],
+            [
+              "Edits disappear",
+              "Bind both models with v-model; the application owns its state."
+            ],
+            [
+              "Sorting or search missing",
+              "Enable sortable or filterable explicitly."
+            ],
+            [
+              "Column cells become misaligned",
+              "Keep header keys unique and update headers and rows together."
+            ],
+            [
+              "Unexpected edit value type",
+              "Editors produce strings; convert values in your application."
+            ],
+            [
+              "Sluggish very large datasets",
+              "Sorting, filtering, and pagination are client-side; limit the dataset or implement a different server-backed view."
+            ],
+            [
+              "TypeScript cannot resolve exports",
+              "Use compatible Vue/TypeScript versions and Bundler or NodeNext resolution."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "license",
+      "title": "License & package contents",
+      "group": "Resources",
+      "lead": "Keep the component small and your demo separate.",
+      "blocks": [
+        {
+          "kind": "p",
+          "text": "Vue Shapeshifter Table is MIT licensed. Preserve its copyright and license notice when redistributing it."
+        },
+        {
+          "kind": "p",
+          "text": "The npm package contains the compiled library, CSS, TypeScript declarations, and documentation. The demo application, sample data, and docs website remain in GitHub and are not installed with the library."
+        },
+        {
+          "kind": "note",
+          "text": "The playground uses fictional data stored in memory. Only the explicit Save column order action writes the layout keys to browser storage."
+        }
+      ]
+    }
+  ]
+}

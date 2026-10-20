@@ -1,9 +1,11 @@
 # Vue Shapeshifter Table
 
 
-## Live demo
+## Documentation & live playground
 
-**[Open the interactive demo](https://vue-shapeshifter-table.vercel.app/)** — no installation or sign-in required.
+**[Documentation](https://vue-shapeshifter-table.vercel.app/)** · **[Live playground](https://vue-shapeshifter-table.vercel.app/#playground)** · **[Quick start](https://vue-shapeshifter-table.vercel.app/#quickstart)**
+
+Installation guides, copyable examples, and an API reference for the published npm package. No sign-in required.
 
 Try the editable Vue 3 table in your browser: edit cells, sort and search rows, reorder columns, and explore pagination. Save column order to keep your layout in this browser; table values reset on refresh.
 
@@ -410,3 +412,7 @@ The demo uses local state: changes are discarded when you refresh the page. Buil
 Licensed under [MIT](LICENSE). This permits commercial use, modification, and
 redistribution, provided the copyright and license notices are retained. The
 software is provided without warranty. See the [MIT license text](https://opensource.org/license/mit).
+
+## Documentation website source
+
+The full documentation site lives in [`docs-site/`](docs-site/). Run `npm ci` and `npm run build` from that directory; deploy `docs-site/dist/`. It consumes the published npm component and is excluded from the library archive.

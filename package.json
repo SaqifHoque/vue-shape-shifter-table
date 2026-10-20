@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "A responsive, editable, shape-shifting table component for Vue 3.",
   "author": "Saqif Haque",
-  "homepage": "https://github.com/SaqifHoque/vue-shape-shifter-table#readme",
+  "homepage": "https://vue-shapeshifter-table.vercel.app/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SaqifHoque/vue-shape-shifter-table.git"

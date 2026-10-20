@@ -1,5 +1,12 @@
 # Vue Shapeshifter Table
 
+
+## Live demo
+
+**[Open the interactive demo](https://vue-shapeshifter-table.vercel.app/)** — no installation or sign-in required.
+
+Try the editable Vue 3 table in your browser: edit cells, sort and search rows, reorder columns, and explore pagination. Save column order to keep your layout in this browser; table values reset on refresh.
+
 ## Saved column order (1.1.0)
 
 Use `applyColumnOrder` after loading table data to restore a user's preferred order. It returns new `headers` and `rows` arrays with matching column positions; it does not read browser storage or modify your inputs.

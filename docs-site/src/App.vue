@@ -2,10 +2,11 @@
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import content from './content.json'
 import Playground from './Playground.vue'
+import Home from './Home.vue'
 
 const pages = content.pages
 const initial = window.location.hash.slice(1)
-const current = ref(pages.some(p => p.id === initial) ? initial : 'overview')
+const current = ref(pages.some(p => p.id === initial) ? initial : 'home')
 const query = ref('')
 const menu = ref(false)
 const copied = ref('')
@@ -26,13 +27,13 @@ const next = computed(() => pages[position.value + 1])
 function go(id) {
   current.value = id; menu.value = false; query.value = ''
   window.location.hash = id
-  document.title = `${active.value.title} · ${content.name}`
+  document.title = current.value === 'home' ? content.name : `${active.value.title} · ${content.name}`
   nextTick(() => document.querySelector('#article-title')?.focus({ preventScroll: true }))
   window.scrollTo({ top: 0, behavior: 'auto' })
 }
 function onHash() {
   const id = window.location.hash.slice(1)
-  if (pages.some(p => p.id === id)) current.value = id
+  if (!id || id === 'home' || pages.some(p => p.id === id)) go(id || 'home')
 }
 function onKey(event) {
   if (event.key === '/' && !event.ctrlKey && !event.metaKey && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) {
@@ -51,26 +52,26 @@ async function copy(text, id) {
     copied.value = id; clearTimeout(copyTimer); copyTimer = setTimeout(() => copied.value = '', 1800)
   } catch { copyError.value = 'Copy was unavailable. Select the code below and copy it manually.' }
 }
-onMounted(() => { window.addEventListener('hashchange', onHash); window.addEventListener('keydown', onKey) })
+onMounted(() => { document.title = current.value === 'home' ? content.name : `${active.value.title} · ${content.name}`; window.addEventListener('hashchange', onHash); window.addEventListener('keydown', onKey) })
 onBeforeUnmount(() => { clearTimeout(copyTimer); window.removeEventListener('hashchange', onHash); window.removeEventListener('keydown', onKey) })
 </script>
 
 <template>
-  <div class="docs-app" :class="[{ dark }, content.accent]">
+  <div class="docs-app" :class="[{ dark: dark && current !== 'home' }, content.accent]">
     <a class="skip-link" href="#main-content">Skip to documentation</a>
     <header class="topbar">
-      <a href="#overview" class="brand" @click.prevent="go('overview')">
+      <a href="#home" class="brand" @click.prevent="go('home')">
         <span class="brand-symbol" aria-hidden="true">{{ content.isDicom ? '◈' : '▦' }}</span>
-        <span>{{ content.name }}<small>Documentation</small></span>
+        <span>{{ content.name }}<small>Vue component library</small></span>
       </a>
-      <div class="top-actions">
+      <nav class="site-nav" aria-label="Main navigation"><a href="#home" @click.prevent="go('home')" :aria-current="current === 'home' ? 'page' : undefined">Home</a><a href="#overview" @click.prevent="go('overview')" :aria-current="current !== 'home' && current !== 'playground' ? 'page' : undefined">Documentation</a><a href="#playground" @click.prevent="go('playground')" :aria-current="current === 'playground' ? 'page' : undefined">Playground</a></nav><div class="top-actions">
         <span class="version">v{{ content.version }}</span>
         <a class="github-link" :href="`https://github.com/SaqifHoque/${content.repo}`" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
         <button class="icon-button" @click="toggleTheme" :aria-label="dark ? 'Switch to light theme' : 'Switch to dark theme'">{{ dark ? '☀' : '☾' }}</button>
-        <button class="icon-button mobile-menu" @click="menu = !menu" :aria-expanded="menu" aria-controls="docs-sidebar" aria-label="Toggle documentation navigation">☰</button>
+        <button v-if="current !== 'home'" class="icon-button mobile-menu" @click="menu = !menu" :aria-expanded="menu" aria-controls="docs-sidebar" aria-label="Toggle documentation navigation">☰</button>
       </div>
     </header>
-    <div v-if="menu" class="menu-scrim" @click="menu = false"></div>
+    <Home v-if="current === 'home'" /><template v-else><div v-if="menu" class="menu-scrim" @click="menu = false"></div>
     <aside id="docs-sidebar" class="sidebar" :class="{ open: menu }">
       <label class="search-box"><span aria-hidden="true">⌕</span><input ref="search" v-model="query" placeholder="Search documentation…" aria-label="Search documentation"><kbd>/</kbd></label>
       <p v-if="query" class="search-count" role="status">{{ results.length }} matching pages</p>
@@ -106,6 +107,6 @@ onBeforeUnmount(() => { clearTimeout(copyTimer); window.removeEventListener('has
         <div class="page-pagination"><a v-if="previous" :href="`#${previous.id}`" @click.prevent="go(previous.id)"><small>← Previous</small>{{ previous.title }}</a><span v-else></span><a v-if="next" :href="`#${next.id}`" @click.prevent="go(next.id)" class="next-page"><small>Next →</small>{{ next.title }}</a></div>
         <footer class="article-footer"><p>Documentation for {{ content.package }} v{{ content.version }}</p><a :href="`https://github.com/SaqifHoque/${content.repo}/issues`" target="_blank" rel="noopener noreferrer">Report an issue ↗</a></footer>
       </article>
-    </main>
+    </main></template>
   </div>
 </template>

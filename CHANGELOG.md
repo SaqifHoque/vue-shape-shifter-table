@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.1.2
+
+- Update Vite, Vue, and the build dependency lockfile to address npm advisories.
+- Run package, demo, and consumer checks on pull requests and publish verified tarballs from `main`.
+- Add weekly Dependabot updates.
 
 - Add custom sort comparators, per-column filters, and accessible edit validation.
 

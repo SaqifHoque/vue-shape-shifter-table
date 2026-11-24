@@ -358,8 +358,9 @@ the consumed bundle.
 `.github/workflows/publish.yml` publishes new stable package versions automatically
 after changes reach `main`. It also supports **Actions → Publish npm package → Run
 workflow** on `main` to retry a failed release. Already-published versions are
-skipped; registry errors stop the release. Versions must increase and match the
-lockfile. Tests, the demo build, the security audit, and a package dry run must pass.
+skipped. New versions must increase and registry errors stop the release. The workflow
+tests the library archive, builds the demo and independent consumers, and audits their
+lockfiles before publishing the verified tarball.
 
 One-time maintainer setup in npm: open this package's **Settings → Trusted
 publishing**, choose **GitHub Actions**, and enter:

@@ -4,70 +4,98 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
 
-concurrency:
-  group: npm-publish
-  cancel-in-progress: false
-
 jobs:
-  publish:
-    if: github.repository == 'SaqifHoque/vue-shape-shifter-table' && github.ref == 'refs/heads/main'
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run security:audit
+      - run: npm test
+      - run: npm run build:demo
+      - name: Verify independent consumers
+        run: |
+          for directory in docs-site examples/minimal; do
+            (cd "$directory" && npm ci && npm audit --audit-level=moderate && npm run build)
+          done
+      - name: Pack verified library
+        if: github.ref == 'refs/heads/main'
+        run: npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/vue-shapeshifter-table-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: verify
+    if: github.repository == 'SaqifHoque/vue-shape-shifter-table' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: npm-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-          cache: npm
-      - name: Check whether this version needs publishing
-        id: version
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: npm-package
+      - name: Publish a new stable version
         run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync, appendFileSync } from 'node:fs';
-          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
-          if (pkg.name !== 'vue-shapeshifter-table' || !/^\d+\.\d+\.\d+$/.test(pkg.version)) {
-            throw new Error('Expected the stable vue-shapeshifter-table package');
-          }
-          if (lock.version !== pkg.version || lock.packages[''].version !== pkg.version) {
-            throw new Error('Package and lockfile versions must match');
-          }
-          const response = await fetch(`https://registry.npmjs.org/${pkg.name}`, {
-            signal: AbortSignal.timeout(30000),
-          });
-          if (!response.ok) throw new Error(`Registry check failed: ${response.status}`);
-          const metadata = await response.json();
-          if (!metadata.versions || !metadata['dist-tags']?.latest) throw new Error('Invalid registry metadata');
-          const exists = Object.hasOwn(metadata.versions, pkg.version);
-          if (!exists) {
-            const current = metadata['dist-tags'].latest.split('.').map(Number);
-            const next = pkg.version.split('.').map(Number);
-            const difference = next.map((part, i) => part - current[i]).find(value => value !== 0);
-            if (!current.every(Number.isInteger) || !(difference > 0)) throw new Error('Version must increase latest');
-          }
-          appendFileSync(process.env.GITHUB_OUTPUT, `publish=${!exists}\n`);
-          console.log(`${pkg.name}@${pkg.version}: ${exists ? 'already published; skipping' : 'ready for verification'}`);
-          NODE
-      - run: npm ci
-        if: steps.version.outputs.publish == 'true'
-      - run: npm test
-        if: steps.version.outputs.publish == 'true'
-      - run: npm run build:demo
-        if: steps.version.outputs.publish == 'true'
-      - run: npm run security:audit
-        if: steps.version.outputs.publish == 'true'
-      - run: npm pack --dry-run
-        if: steps.version.outputs.publish == 'true'
-      - name: Publish using npm trusted publishing
-        if: steps.version.outputs.publish == 'true'
-        run: npm publish --access public --provenance
+          tarballs=(vue-shapeshifter-table-*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
+            echo "Expected exactly one package tarball" >&2
+            exit 1
+          fi
+          tarball="$PWD/${tarballs[0]}"
+          if tar -xOf "$tarball" package/package.json | node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const { name, version } = JSON.parse(readFileSync(0, "utf8"));
+            const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+            if (name !== "vue-shapeshifter-table" || !stable.test(version)) {
+              throw new Error("Unexpected package name or version");
+            }
+            const response = await fetch("https://registry.npmjs.org/" + name, {
+              signal: AbortSignal.timeout(30000),
+            });
+            if (response.status === 404) {
+              throw new Error("Publish the first version with an npm maintainer account, then configure Trusted publishing");
+            }
+            if (!response.ok) throw new Error("Registry check failed with " + response.status);
+            const metadata = await response.json();
+            const latest = metadata["dist-tags"]?.latest;
+            if (!metadata.versions || !stable.test(latest)) throw new Error("Invalid registry metadata");
+            if (Object.hasOwn(metadata.versions, version)) {
+              console.log(name + "@" + version + " is already published");
+              process.exit(10);
+            }
+            const previous = latest.split(".").map(Number);
+            const difference = version.split(".").map((part, i) => Number(part) - previous[i]).find(Boolean);
+            if (!(difference > 0)) throw new Error("The release version must be newer than latest");
+          '; then
+            npm publish "$tarball" --ignore-scripts --access public
+          else
+            status=$?
+            if [[ "$status" -ne 10 ]]; then exit "$status"; fi
+          fi
